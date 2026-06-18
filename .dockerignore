@@ -1,0 +1,10 @@
+.git
+.idea
+.vscode
+bin
+coverage.*
+*.log
+.env
+.env.local
+test
+docs

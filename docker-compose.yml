@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: asyncstarter_postgres
+    environment:
+      POSTGRES_USER: starter
+      POSTGRES_PASSWORD: starter
+      POSTGRES_DB: starter
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U starter"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: asyncstarter_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    container_name: asyncstarter_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      APP_PORT: "8080"
+      DATABASE_URL: postgres://starter:starter@postgres:5432/starter?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
