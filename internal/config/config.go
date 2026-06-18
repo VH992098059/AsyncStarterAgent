@@ -7,11 +7,12 @@ import (
 
 // Config 集中管理应用配置（环境变量加载）
 type Config struct {
-	Env      string
-	Port     string
-	DSN      string
-	RedisURL string
-	JWTSecret string
+	Env                  string
+	Port                 string
+	DSN                  string
+	RedisURL             string
+	JWTSecret            string
+	TodoistWebhookSecret string
 }
 
 // Load 从环境变量加载配置；生产环境强制要求 JWT_SECRET
@@ -21,17 +22,19 @@ func Load() (*Config, error) {
 	dsn := getEnv("DATABASE_URL", "")
 	redis := getEnv("REDIS_URL", "redis://localhost:6379/0")
 	jwt := getEnv("JWT_SECRET", "")
+	todoistSecret := getEnv("TODOIST_WEBHOOK_SECRET", "")
 
 	if env == "production" && jwt == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required in production")
 	}
 
 	return &Config{
-		Env:       env,
-		Port:      port,
-		DSN:       dsn,
-		RedisURL:  redis,
-		JWTSecret: jwt,
+		Env:                  env,
+		Port:                 port,
+		DSN:                  dsn,
+		RedisURL:             redis,
+		JWTSecret:            jwt,
+		TodoistWebhookSecret: todoistSecret,
 	}, nil
 }
 

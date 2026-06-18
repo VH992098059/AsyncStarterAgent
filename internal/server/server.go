@@ -19,5 +19,9 @@ func New(cfg *config.Config) *gin.Engine {
 	})
 
 	r.GET("/health", handler.Health)
+
+	wh := &handler.WebhookHandler{Secret: cfg.TodoistWebhookSecret}
+	r.POST("/api/v1/webhook/todoist", wh.Todoist)
+
 	return r
 }
