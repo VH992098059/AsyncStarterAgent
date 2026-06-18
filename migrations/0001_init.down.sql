@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS sync_timestamps;
+DROP TABLE IF EXISTS templates;
+DROP TABLE IF EXISTS deliveries;
+DROP TABLE IF EXISTS data_sources;
+DROP TABLE IF EXISTS drafts;
+DROP TABLE IF EXISTS agent_runs;

@@ -2,6 +2,8 @@
 
 GO ?= go
 APP := bin/api
+MIGRATE := github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+DATABASE_URL ?= postgres://starter:starter@localhost:5432/starter?sslmode=disable
 
 help:
 	@echo "Available targets:"
@@ -31,11 +33,11 @@ test-integration:
 lint:
 	golangci-lint run ./...
 
-migrate-up:
-	@echo "TODO: integrate golang-migrate in T003"
+migrate-up: ## 应用迁移
+	$(GO) run -tags 'postgres' $(MIGRATE) -database "$(DATABASE_URL)" -path ./migrations up
 
-migrate-down:
-	@echo "TODO: integrate golang-migrate in T003"
+migrate-down: ## 回滚迁移
+	$(GO) run -tags 'postgres' $(MIGRATE) -database "$(DATABASE_URL)" -path ./migrations down 1
 
 docker-up:
 	docker compose up -d
