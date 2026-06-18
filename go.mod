@@ -8,6 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/larksuite/oapi-sdk-go/v3 v3.9.6
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.285.0
 )
