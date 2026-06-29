@@ -6,6 +6,7 @@ require (
 	github.com/cloudwego/eino v0.9.9
 	github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260616080858-ab17b7308bf8
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.13
+	
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1

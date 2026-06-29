@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务进度跟踪 - 完成前30% 异步行动起跑器 Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#172033',
+              950: '#0b1120',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* 环形进度条 */
+    .ring-progress {
+      transform: rotate(-90deg);
+    }
+    .ring-track { stroke: #1e293b; }
+    .ring-fill {
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s ease;
+    }
+
+    /* 渐变进度条 */
+    .progress-gradient {
+      background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa);
+      border-radius: 9999px;
+      transition: width 0.8s ease;
+    }
+
+    /* 甘特图条形 */
+    .gantt-bar {
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      border-radius: 4px;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .gantt-bar:hover {
+      filter: brightness(1.2);
+      transform: scaleY(1.15);
+    }
+    .gantt-bar.critical {
+      background: linear-gradient(90deg, #ef4444, #f97316);
+    }
+
+    /* 依赖箭头 */
+    .dep-arrow {
+      stroke: #475569;
+      stroke-width: 1.5;
+      fill: none;
+      marker-end: url(#arrowhead);
+    }
+
+    /* 卡片动画 */
+    .task-card {
+      transition: all 0.2s ease;
+    }
+    .task-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    }
+
+    /* 详情展开 */
+    .detail-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .detail-panel.open {
+      max-height: 200px;
+    }
+
+    /* 视图切换动画 */
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+
+    /* 甘特图网格 */
+    .gantt-grid-line {
+      border-left: 1px solid #1e293b;
+    }
+
+    /* Tab激活指示器 */
+    .tab-btn.active {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      border-color: #6366f1;
+    }
+
+    /* 筛选按钮 */
+    .filter-btn.active {
+      background: rgba(99, 102, 241, 0.3);
+      color: #c7d2fe;
+      border-color: #6366f1;
+    }
+
+    /* 状态切换按钮 */
+    .status-cycle-btn {
+      cursor: pointer;
+      user-select: none;
+    }
+    .status-cycle-btn:hover {
+      filter: brightness(1.2);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+  <!-- 顶部导航栏 -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-14">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-sm font-bold">A</div>
+          <span class="font-semibold text-sm sm:text-base truncate">"完成前 30%" 异步行动起跑器 Agent</span>
+        </div>
+        <div class="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+          <a href="mvp-definition.html" class="px-2 sm:px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">MVP定义</a>
+          <a href="task-tracker.html" class="px-2 sm:px-3 py-1.5 rounded-md text-indigo-400 bg-indigo-500/10 border border-indigo-500/30">任务跟踪</a>
+          <a href="requirement-spec.html" class="px-2 sm:px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">需求说明</a>
+          <a href="prototype.html" class="px-2 sm:px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition">原型UI</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 pt-20 pb-12">
+
+    <!-- 进度统计仪表盘 -->
+    <section class="mb-8">
+      <h2 class="text-lg font-semibold mb-4 text-slate-300">📊 进度总览</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- 总体完成率环形进度 -->
+        <div class="lg:col-span-3 bg-slate-900/60 border border-slate-800 rounded-xl p-5 flex flex-col items-center justify-center">
+          <div class="relative w-32 h-32">
+            <svg class="ring-progress w-full h-full" viewBox="0 0 120 120">
+              <circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+              <circle id="overallRing" class="ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10"
+                      stroke="url(#ringGrad)" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+              <defs>
+                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#6366f1"/>
+                  <stop offset="100%" stop-color="#a78bfa"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span id="overallPercent" class="text-2xl font-bold text-indigo-400">0%</span>
+              <span class="text-xs text-slate-500">完成率</span>
+            </div>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400">
+            <div>总任务 <span id="statTotal" class="text-slate-200 font-medium">25</span></div>
+            <div>已完成 <span id="statDone" class="text-emerald-400 font-medium">0</span></div>
+            <div>进行中 <span id="statProgress" class="text-blue-400 font-medium">0</span></div>
+            <div>待办 <span id="statTodo" class="text-slate-400 font-medium">25</span></div>
+            <div>阻塞 <span id="statBlocked" class="text-red-400 font-medium">0</span></div>
+          </div>
+        </div>
+
+        <!-- 阶段进度条 -->
+        <div class="lg:col-span-9 bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+          <div class="space-y-4" id="phaseProgressBars">
+            <!-- JS渲染 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 视图切换 -->
+    <section class="mb-6">
+      <div class="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button class="tab-btn active px-4 py-2 text-sm rounded-lg border border-transparent transition" data-view="kanban">📋 看板视图</button>
+        <button class="tab-btn px-4 py-2 text-sm rounded-lg border border-transparent text-slate-400 hover:text-slate-200 transition" data-view="list">📑 列表视图</button>
+        <button class="tab-btn px-4 py-2 text-sm rounded-lg border border-transparent text-slate-400 hover:text-slate-200 transition" data-view="gantt">📊 甘特图视图</button>
+      </div>
+    </section>
+
+    <!-- 看板视图 -->
+    <section id="view-kanban" class="view-panel active">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 待办列 -->
+        <div class="bg-slate-900/40 border border-slate-800 rounded-xl">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+              <span class="font-medium text-sm">待办</span>
+            </div>
+            <span id="kanbanTodoCount" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanbanTodo" class="p-3 space-y-3 min-h-[200px]">
+            <!-- JS渲染 -->
+          </div>
+        </div>
+        <!-- 进行中列 -->
+        <div class="bg-slate-900/40 border border-slate-800 rounded-xl">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+              <span class="font-medium text-sm">进行中</span>
+            </div>
+            <span id="kanbanProgressCount" class="text-xs bg-slate-800 text-blue-400 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanbanProgress" class="p-3 space-y-3 min-h-[200px]">
+            <!-- JS渲染 -->
+          </div>
+        </div>
+        <!-- 已完成列 -->
+        <div class="bg-slate-900/40 border border-slate-800 rounded-xl">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span class="font-medium text-sm">已完成</span>
+            </div>
+            <span id="kanbanDoneCount" class="text-xs bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="kanbanDone" class="p-3 space-y-3 min-h-[200px]">
+            <!-- JS渲染 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 列表视图 -->
+    <section id="view-list" class="view-panel">
+      <!-- 筛选栏 -->
+      <div class="mb-4 flex flex-wrap gap-3 items-center">
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-500">阶段:</span>
+          <div class="flex gap-1" id="filterPhase">
+            <button class="filter-btn active text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="all">全部</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 0">P0</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 1">P1</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 2">P2</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 3">P3</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 4">P4</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-500">优先级:</span>
+          <div class="flex gap-1" id="filterPriority">
+            <button class="filter-btn active text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-priority="all">全部</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-priority="P0">P0</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-priority="P1">P1</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-priority="P2">P2</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-500">状态:</span>
+          <div class="flex gap-1" id="filterStatus">
+            <button class="filter-btn active text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-status="all">全部</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-status="待办">待办</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-status="进行中">进行中</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-status="已完成">已完成</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-status="阻塞">阻塞</button>
+          </div>
+        </div>
+      </div>
+      <!-- 表格 -->
+      <div class="overflow-x-auto bg-slate-900/40 border border-slate-800 rounded-xl">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-800 text-slate-400 text-xs">
+              <th class="px-4 py-3 text-left font-medium">任务ID</th>
+              <th class="px-4 py-3 text-left font-medium">任务名称</th>
+              <th class="px-4 py-3 text-left font-medium">阶段</th>
+              <th class="px-4 py-3 text-left font-medium">优先级</th>
+              <th class="px-4 py-3 text-left font-medium">状态</th>
+              <th class="px-4 py-3 text-left font-medium">负责模块</th>
+              <th class="px-4 py-3 text-left font-medium">开始</th>
+              <th class="px-4 py-3 text-left font-medium">结束</th>
+              <th class="px-4 py-3 text-left font-medium">依赖</th>
+              <th class="px-4 py-3 text-left font-medium">交付标准</th>
+            </tr>
+          </thead>
+          <tbody id="listTableBody">
+            <!-- JS渲染 -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 甘特图视图 -->
+    <section id="view-gantt" class="view-panel">
+      <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-5 overflow-x-auto">
+        <div class="mb-4 flex items-center gap-4 text-xs text-slate-500">
+          <span class="flex items-center gap-1.5"><span class="w-4 h-2.5 rounded gantt-bar inline-block"></span> 普通任务</span>
+          <span class="flex items-center gap-1.5"><span class="w-4 h-2.5 rounded gantt-bar critical inline-block"></span> 关键路径</span>
+        </div>
+        <div id="ganttChart" class="min-w-[900px]">
+          <!-- JS渲染 -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ==================== 任务数据 ====================
+    const tasks = [
+      { id:'T001', name:'Go项目初始化与目录结构', phase:'Phase 0', priority:'P0', status:'已完成', module:'后端', start:'W1', end:'W1', deps:[], criteria:'项目可编译运行' },
+      { id:'T002', name:'Gin框架搭建与中间件配置', phase:'Phase 0', priority:'P0', status:'已完成', module:'后端', start:'W1', end:'W1', deps:['T001'], criteria:'REST API健康检查通过' },
+      { id:'T003', name:'数据库Schema设计与迁移', phase:'Phase 0', priority:'P0', status:'已完成', module:'后端', start:'W1', end:'W2', deps:['T001'], criteria:'表结构创建完成，迁移脚本可用' },
+      { id:'T004', name:'Redis任务队列集成', phase:'Phase 0', priority:'P1', status:'已完成', module:'后端', start:'W2', end:'W2', deps:['T002','T003'], criteria:'队列入队/出队/重试正常' },
+      { id:'T005', name:'Docker开发环境配置', phase:'Phase 0', priority:'P1', status:'已完成', module:'运维', start:'W2', end:'W2', deps:['T001'], criteria:'docker-compose up 一键启动' },
+
+      { id:'T006', name:'Webhook监听服务', phase:'Phase 1', priority:'P0', status:'已完成', module:'后端', start:'W3', end:'W3', deps:['T002'], criteria:'可接收外部Webhook并解析' },
+      { id:'T007', name:'关键词匹配规则引擎', phase:'Phase 1', priority:'P0', status:'已完成', module:'后端', start:'W3', end:'W3', deps:['T006'], criteria:'支持"写/准备/规划"等关键词触发' },
+      { id:'T008', name:'DDL截止日期检测器', phase:'Phase 1', priority:'P1', status:'已完成', module:'后端', start:'W3', end:'W4', deps:['T006'], criteria:'定时扫描DDL并触发任务' },
+      { id:'T009', name:'任务调度器整合', phase:'Phase 1', priority:'P1', status:'已完成', module:'后端', start:'W4', end:'W4', deps:['T007','T008'], criteria:'关键词+DDL双通道触发正常' },
+
+      { id:'T010', name:'GitHub数据源适配器', phase:'Phase 2', priority:'P0', status:'已完成', module:'后端', start:'W4', end:'W5', deps:['T003'], criteria:'可拉取Commit/PR记录' },
+      { id:'T011', name:'日历数据源适配器', phase:'Phase 2', priority:'P1', status:'已完成', module:'后端', start:'W5', end:'W5', deps:['T003'], criteria:'可拉取Google/Outlook日程' },
+      { id:'T012', name:'IM沟通记录适配器', phase:'Phase 2', priority:'P1', status:'已完成', module:'后端', start:'W5', end:'W6', deps:['T003'], criteria:'可拉取飞书/Slack消息' },
+      { id:'T013', name:'笔记数据源适配器', phase:'Phase 2', priority:'P1', status:'已完成', module:'后端', start:'W6', end:'W6', deps:['T003'], criteria:'可读取Obsidian/Notion笔记' },
+      { id:'T014', name:'ETL管线与增量同步', phase:'Phase 2', priority:'P0', status:'已完成', module:'后端', start:'W6', end:'W7', deps:['T010','T011','T012','T013'], criteria:'增量Embedding存储正常' },
+
+      { id:'T015', name:'RAG向量检索模块', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W7', end:'W7', deps:['T014'], criteria:'语义检索召回率>80%' },
+      { id:'T016', name:'Eino Agent编排实现', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W7', end:'W8', deps:['T015'], criteria:'DAG流程可运行' },
+      { id:'T017', name:'模板引擎开发', phase:'Phase 3', priority:'P1', status:'已完成', module:'后端', start:'W8', end:'W8', deps:['T016'], criteria:'周报/总结模板可渲染' },
+      { id:'T018', name:'LLM调用与润色', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W8', end:'W9', deps:['T016'], criteria:'生成文本通顺度评分>4/5' },
+      { id:'T019', name:'[待补充]标记系统', phase:'Phase 3', priority:'P1', status:'已完成', module:'后端', start:'W9', end:'W9', deps:['T018'], criteria:'标记位置准确可定位' },
+      { id:'T020', name:'SSE流式输出接口', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W9', end:'W9', deps:['T018'], criteria:'前端可实时接收流式数据' },
+
+      { id:'T021', name:'方案一Tauri前端原型', phase:'Phase 4', priority:'P0', status:'已完成', module:'前端A', start:'W10', end:'W12', deps:['T020'], criteria:'核心流程可交互' },
+      { id:'T022', name:'方案二Flutter前端原型', phase:'Phase 4', priority:'P1', status:'待办', module:'前端B', start:'W10', end:'W12', deps:['T020'], criteria:'核心流程可交互' },
+      { id:'T023', name:'Notion API文档交付', phase:'Phase 4', priority:'P0', status:'已完成', module:'后端', start:'W12', end:'W12', deps:['T018'], criteria:'可自动创建Notion页面' },
+      { id:'T024', name:'Obsidian Vault交付', phase:'Phase 4', priority:'P1', status:'已完成', module:'后端', start:'W12', end:'W13', deps:['T018'], criteria:'可写入Markdown文件' },
+      { id:'T025', name:'飞书文档交付', phase:'Phase 4', priority:'P2', status:'已完成', module:'后端', start:'W13', end:'W13', deps:['T018'], criteria:'可创建飞书文档' },
+      { id:'T026', name:'Eino Workflow编排集成', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W9', end:'W10', deps:['T016'], criteria:'Eino Workflow5阶段DAG可编译运行' },
+    ];
+
+    // 阶段定义
+    const phases = [
+      { name:'Phase 0', label:'基础设施搭建', color:'#6366f1' },
+      { name:'Phase 1', label:'触发引擎', color:'#8b5cf6' },
+      { name:'Phase 2', label:'上下文搜集', color:'#a78bfa' },
+      { name:'Phase 3', label:'草稿生成', color:'#c4b5fd' },
+      { name:'Phase 4', label:'前端与交付', color:'#818cf8' },
+    ];
+
+    // 关键路径任务ID
+    const criticalPath = ['T001','T002','T006','T007','T009','T014','T015','T016','T018','T020','T021'];
+
+    // 状态循环顺序
+    const statusCycle = ['待办', '进行中', '已完成', '阻塞'];
+
+    // ==================== 工具函数 ====================
+    function getPriorityClass(p) {
+      if (p === 'P0') return 'bg-red-500/20 text-red-400';
+      if (p === 'P1') return 'bg-amber-500/20 text-amber-400';
+      if (p === 'P2') return 'bg-sky-500/20 text-sky-400';
+      return 'bg-slate-500/20 text-slate-400';
+    }
+
+    function getStatusClass(s) {
+      if (s === '待办') return 'bg-slate-500/20 text-slate-400';
+      if (s === '进行中') return 'bg-blue-500/20 text-blue-400';
+      if (s === '已完成') return 'bg-emerald-500/20 text-emerald-400';
+      if (s === '阻塞') return 'bg-red-500/20 text-red-400';
+      return 'bg-slate-500/20 text-slate-400';
+    }
+
+    function getStatusDot(s) {
+      if (s === '待办') return 'bg-slate-500';
+      if (s === '进行中') return 'bg-blue-500';
+      if (s === '已完成') return 'bg-emerald-500';
+      if (s === '阻塞') return 'bg-red-500';
+      return 'bg-slate-500';
+    }
+
+    function weekToNum(w) {
+      return parseInt(w.replace('W',''));
+    }
+
+    // ==================== 统计与仪表盘 ====================
+    function updateDashboard() {
+      const total = tasks.length;
+      const done = tasks.filter(t => t.status === '已完成').length;
+      const progress = tasks.filter(t => t.status === '进行中').length;
+      const todo = tasks.filter(t => t.status === '待办').length;
+      const blocked = tasks.filter(t => t.status === '阻塞').length;
+      const pct = Math.round((done / total) * 100);
+
+      // 环形进度
+      const circumference = 2 * Math.PI * 52;
+      const offset = circumference - (pct / 100) * circumference;
+      document.getElementById('overallRing').style.strokeDashoffset = offset;
+      document.getElementById('overallPercent').textContent = pct + '%';
+
+      // 统计数字
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statDone').textContent = done;
+      document.getElementById('statProgress').textContent = progress;
+      document.getElementById('statTodo').textContent = todo;
+      document.getElementById('statBlocked').textContent = blocked;
+
+      // 阶段进度条
+      const container = document.getElementById('phaseProgressBars');
+      container.innerHTML = '';
+      phases.forEach(ph => {
+        const phaseTasks = tasks.filter(t => t.phase === ph.name);
+        const phaseDone = phaseTasks.filter(t => t.status === '已完成').length;
+        const phasePct = phaseTasks.length ? Math.round((phaseDone / phaseTasks.length) * 100) : 0;
+        container.innerHTML += `
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium" style="color:${ph.color}">${ph.name}</span>
+                <span class="text-xs text-slate-500">${ph.label}</span>
+              </div>
+              <span class="text-xs text-slate-400">${phaseDone}/${phaseTasks.length} · ${phasePct}%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div class="progress-gradient h-full" style="width:${phasePct}%; background:linear-gradient(90deg, ${ph.color}, ${ph.color}88)"></div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // ==================== 看板视图 ====================
+    function renderKanban() {
+      const todoCol = document.getElementById('kanbanTodo');
+      const progressCol = document.getElementById('kanbanProgress');
+      const doneCol = document.getElementById('kanbanDone');
+
+      const todoTasks = tasks.filter(t => t.status === '待办');
+      const progressTasks = tasks.filter(t => t.status === '进行中');
+      const doneTasks = tasks.filter(t => t.status === '已完成');
+      const blockedTasks = tasks.filter(t => t.status === '阻塞');
+
+      document.getElementById('kanbanTodoCount').textContent = todoTasks.length + blockedTasks.length;
+      document.getElementById('kanbanProgressCount').textContent = progressTasks.length;
+      document.getElementById('kanbanDoneCount').textContent = doneTasks.length;
+
+      todoCol.innerHTML = '';
+      blockedTasks.forEach(t => todoCol.innerHTML += createKanbanCard(t));
+      todoTasks.forEach(t => todoCol.innerHTML += createKanbanCard(t));
+
+      progressCol.innerHTML = '';
+      progressTasks.forEach(t => progressCol.innerHTML += createKanbanCard(t));
+
+      doneCol.innerHTML = '';
+      doneTasks.forEach(t => doneCol.innerHTML += createKanbanCard(t));
+    }
+
+    function createKanbanCard(task) {
+      const isCritical = criticalPath.includes(task.id);
+      return `
+        <div class="task-card bg-slate-850 border ${isCritical ? 'border-red-500/30' : 'border-slate-700'} rounded-lg p-3 cursor-pointer" onclick="toggleDetail('${task.id}')">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-mono text-slate-500">${task.id}</span>
+            <div class="flex items-center gap-1.5">
+              ${isCritical ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">关键</span>' : ''}
+              <span class="text-[10px] ${getPriorityClass(task.priority)} px-1.5 py-0.5 rounded">${task.priority}</span>
+            </div>
+          </div>
+          <div class="text-sm font-medium mb-2 ${task.status === '已完成' ? 'line-through text-slate-500' : ''}">${task.name}</div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-slate-500">${task.module}</span>
+              <span class="text-[10px] text-slate-600">${task.start} → ${task.end}</span>
+            </div>
+            <button class="status-cycle-btn text-[10px] ${getStatusClass(task.status)} px-2 py-0.5 rounded-full border border-transparent hover:border-slate-600" onclick="event.stopPropagation(); cycleStatus('${task.id}')">
+              <span class="inline-block w-1.5 h-1.5 rounded-full ${getStatusDot(task.status)} mr-1"></span>${task.status}
+            </button>
+          </div>
+          <div id="detail-${task.id}" class="detail-panel mt-2">
+            <div class="border-t border-slate-700/50 pt-2 space-y-1 text-xs text-slate-500">
+              <div><span class="text-slate-400">交付标准：</span>${task.criteria}</div>
+              <div><span class="text-slate-400">依赖：</span>${task.deps.length ? task.deps.join(', ') : '无'}</div>
+              <div><span class="text-slate-400">阶段：</span>${task.phase}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleDetail(id) {
+      const el = document.getElementById('detail-' + id);
+      if (el) el.classList.toggle('open');
+    }
+
+    function cycleStatus(id) {
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+      const idx = statusCycle.indexOf(task.status);
+      task.status = statusCycle[(idx + 1) % statusCycle.length];
+      renderAll();
+    }
+
+    // ==================== 列表视图 ====================
+    let listFilters = { phase: 'all', priority: 'all', status: 'all' };
+
+    function renderList() {
+      const tbody = document.getElementById('listTableBody');
+      const filtered = tasks.filter(t => {
+        if (listFilters.phase !== 'all' && t.phase !== listFilters.phase) return false;
+        if (listFilters.priority !== 'all' && t.priority !== listFilters.priority) return false;
+        if (listFilters.status !== 'all' && t.status !== listFilters.status) return false;
+        return true;
+      });
+
+      tbody.innerHTML = filtered.map(t => `
+        <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition cursor-pointer" onclick="toggleListDetail('${t.id}')">
+          <td class="px-4 py-3 font-mono text-xs text-indigo-400">${t.id}</td>
+          <td class="px-4 py-3 text-sm ${t.status === '已完成' ? 'line-through text-slate-500' : ''}">${t.name}</td>
+          <td class="px-4 py-3 text-xs text-slate-400">${t.phase}</td>
+          <td class="px-4 py-3"><span class="text-[10px] ${getPriorityClass(t.priority)} px-1.5 py-0.5 rounded">${t.priority}</span></td>
+          <td class="px-4 py-3">
+            <button class="status-cycle-btn text-[10px] ${getStatusClass(t.status)} px-2 py-0.5 rounded-full" onclick="event.stopPropagation(); cycleStatus('${t.id}')">
+              <span class="inline-block w-1.5 h-1.5 rounded-full ${getStatusDot(t.status)} mr-1"></span>${t.status}
+            </button>
+          </td>
+          <td class="px-4 py-3 text-xs text-slate-400">${t.module}</td>
+          <td class="px-4 py-3 text-xs text-slate-500">${t.start}</td>
+          <td class="px-4 py-3 text-xs text-slate-500">${t.end}</td>
+          <td class="px-4 py-3 text-xs text-slate-500">${t.deps.length ? t.deps.join(', ') : '-'}</td>
+          <td class="px-4 py-3 text-xs text-slate-500 max-w-[200px] truncate" title="${t.criteria}">${t.criteria}</td>
+        </tr>
+        <tr class="border-b border-slate-800/30" id="list-detail-${t.id}" style="display:none">
+          <td colspan="10" class="px-6 py-3 bg-slate-900/50 text-xs text-slate-400">
+            <div class="grid grid-cols-2 gap-2">
+              <div><span class="text-slate-300">交付标准：</span>${t.criteria}</div>
+              <div><span class="text-slate-300">依赖任务：</span>${t.deps.length ? t.deps.join(', ') : '无'}</div>
+              <div><span class="text-slate-300">阶段：</span>${t.phase}</div>
+              <div><span class="text-slate-300">时间跨度：</span>${t.start} → ${t.end}</div>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleListDetail(id) {
+      const el = document.getElementById('list-detail-' + id);
+      if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+    }
+
+    // 筛选按钮事件
+    function setupFilters() {
+      ['filterPhase','filterPriority','filterStatus'].forEach(groupId => {
+        const group = document.getElementById(groupId);
+        group.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            group.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const key = groupId.replace('filter','').toLowerCase();
+            if (key === 'phase') listFilters.phase = btn.dataset.phase;
+            else if (key === 'priority') listFilters.priority = btn.dataset.priority;
+            else if (key === 'status') listFilters.status = btn.dataset.status;
+            renderList();
+          });
+        });
+      });
+    }
+
+    // ==================== 甘特图视图 ====================
+    function renderGantt() {
+      const container = document.getElementById('ganttChart');
+      const totalWeeks = 13;
+      const weekWidth = 60;
+      const rowHeight = 32;
+      const labelWidth = 180;
+      const svgWidth = labelWidth + totalWeeks * weekWidth;
+
+      // 按阶段分组
+      const grouped = phases.map(ph => ({
+        ...ph,
+        tasks: tasks.filter(t => t.phase === ph.name)
+      }));
+
+      let html = `<svg width="${svgWidth}" height="${(tasks.length + phases.length) * rowHeight + 40}" xmlns="http://www.w3.org/2000/svg">`;
+
+      // 箭头标记定义
+      html += `<defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#475569"/>
+        </marker>
+      </defs>`;
+
+      // 周标题
+      for (let w = 1; w <= totalWeeks; w++) {
+        const x = labelWidth + (w - 1) * weekWidth;
+        html += `<text x="${x + weekWidth/2}" y="16" fill="#64748b" font-size="10" text-anchor="middle">W${w}</text>`;
+        html += `<line x1="${x}" y1="24" x2="${x}" y2="${(tasks.length + phases.length) * rowHeight + 30}" stroke="#1e293b" stroke-width="1"/>`;
+      }
+
+      let y = 30;
+      const taskYMap = {};
+
+      grouped.forEach(group => {
+        // 阶段标题行
+        html += `<rect x="0" y="${y}" width="${svgWidth}" height="${rowHeight}" fill="${group.color}10" rx="4"/>`;
+        html += `<text x="8" y="${y + rowHeight/2 + 4}" fill="${group.color}" font-size="11" font-weight="600">${group.name} ${group.label}</text>`;
+        y += rowHeight;
+
+        group.tasks.forEach(task => {
+          taskYMap[task.id] = y + rowHeight / 2;
+
+          // 任务标签
+          html += `<text x="8" y="${y + rowHeight/2 + 4}" fill="#94a3b8" font-size="10">${task.id} ${task.name.length > 14 ? task.name.substring(0,14)+'…' : task.name}</text>`;
+
+          // 甘特条
+          const startW = weekToNum(task.start);
+          const endW = weekToNum(task.end);
+          const barX = labelWidth + (startW - 1) * weekWidth + 4;
+          const barW = Math.max((endW - startW + 1) * weekWidth - 8, 20);
+          const isCritical = criticalPath.includes(task.id);
+          const fillColor = isCritical ? 'url(#critGrad)' : 'url(#barGrad)';
+
+          html += `<rect x="${barX}" y="${y + 6}" width="${barW}" height="${rowHeight - 12}" rx="4" fill="${fillColor}" opacity="0.85">
+            <title>${task.id}: ${task.name} (${task.start}-${task.end})</title>
+          </rect>`;
+
+          // 任务ID在条上
+          html += `<text x="${barX + barW/2}" y="${y + rowHeight/2 + 3}" fill="white" font-size="9" text-anchor="middle" font-weight="500">${task.id}</text>`;
+
+          y += rowHeight;
+        });
+      });
+
+      // 渐变定义
+      html += `<defs>
+        <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#6366f1"/>
+          <stop offset="100%" stop-color="#8b5cf6"/>
+        </linearGradient>
+        <linearGradient id="critGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#ef4444"/>
+          <stop offset="100%" stop-color="#f97316"/>
+        </linearGradient>
+      </defs>`;
+
+      // 依赖箭头
+      tasks.forEach(task => {
+        task.deps.forEach(depId => {
+          if (taskYMap[depId] && taskYMap[task.id]) {
+            const depTask = tasks.find(t => t.id === depId);
+            const depEndW = weekToNum(depTask.end);
+            const taskStartW = weekToNum(task.start);
+            const fromX = labelWidth + depEndW * weekWidth;
+            const toX = labelWidth + (taskStartW - 1) * weekWidth + 4;
+            const fromY = taskYMap[depId];
+            const toY = taskYMap[task.id];
+            const midX = (fromX + toX) / 2;
+            html += `<path d="M${fromX},${fromY} C${midX},${fromY} ${midX},${toY} ${toX},${toY}" class="dep-arrow"/>`;
+          }
+        });
+      });
+
+      html += '</svg>';
+      container.innerHTML = html;
+    }
+
+    // ==================== 视图切换 ====================
+    function setupTabs() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+          document.getElementById('view-' + btn.dataset.view).classList.add('active');
+        });
+      });
+    }
+
+    // ==================== 全局渲染 ====================
+    function renderAll() {
+      updateDashboard();
+      renderKanban();
+      renderList();
+      renderGantt();
+    }
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      setupTabs();
+      setupFilters();
+      renderAll();
+    });
+  </script>
+</body>
+</html>

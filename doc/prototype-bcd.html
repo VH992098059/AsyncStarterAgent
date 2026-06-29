@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AsyncStarterAgent - 界面原型</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #18181b;
+            --bg-hover: #1a1a1d;
+            --border-color: rgba(255, 255, 255, 0.06);
+            --border-strong: rgba(255, 255, 255, 0.12);
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-tertiary: #71717a;
+            --accent: #10b981;
+            --accent-hover: #059669;
+            --accent-bg: rgba(16, 185, 129, 0.1);
+            --amber: #f59e0b;
+            --amber-bg: rgba(245, 158, 11, 0.1);
+            --red: #ef4444;
+            --red-bg: rgba(239, 68, 68, 0.1);
+            --blue: #3b82f6;
+            --blue-bg: rgba(59, 130, 246, 0.1);
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --sidebar-width: 240px;
+            --transition-fast: 0.2s ease;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #fafafa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f4f4f5;
+            --bg-hover: #f9fafb;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-strong: rgba(0, 0, 0, 0.15);
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-tertiary: #a1a1aa;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            height: 56px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .menu-btn {
+            display: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .search-box {
+            flex: 1;
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            height: 38px;
+            padding: 0 16px 0 42px;
+            border-radius: 19px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .search-box input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+        }
+
+        .search-box input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-tertiary);
+            font-size: 16px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* Overlay for mobile sidebar */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 150;
+        }
+
+        .sidebar-overlay.show {
+            display: block;
+        }
+
+        /* Main Content */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto;
+            z-index: 200;
+            transition: transform var(--transition-fast);
+        }
+
+        .nav-group {
+            padding: 16px 12px 8px;
+        }
+
+        .nav-group-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0 12px 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all var(--transition-fast);
+            margin-bottom: 2px;
+            user-select: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--accent-bg);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .nav-item .icon {
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        /* Kanban Area */
+        .kanban-area {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-open .kanban-area {
+            flex: 0 0 380px;
+            min-width: 320px;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .kanban-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .kanban-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .kanban-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-secondary {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .kanban-columns {
+            flex: 1;
+            display: flex;
+            gap: 12px;
+            padding: 16px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .kanban-column {
+            flex: 0 0 180px;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .column-header {
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .column-title {
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .column-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .column-count {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            background: var(--bg-secondary);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .column-cards {
+            flex: 1;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+        }
+
+        .kanban-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border-left: 3px solid transparent;
+        }
+
+        .kanban-card:hover {
+            border-color: var(--border-strong);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .kanban-card.selected {
+            border-color: var(--accent);
+            border-left-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        .kanban-card.running {
+            border-left-color: var(--amber);
+        }
+
+        .kanban-card.running .card-status-dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-tertiary);
+        }
+
+        .card-status {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .card-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .status-pending { background: var(--text-tertiary); }
+        .status-running { background: var(--amber); }
+        .status-draft { background: var(--blue); }
+        .status-ready { background: var(--accent); }
+        .status-done { background: var(--accent); }
+        .status-error { background: var(--red); }
+
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            min-width: 0;
+            display: none;
+            flex-direction: column;
+            background: var(--bg-primary);
+            border-left: 1px solid var(--border-color);
+        }
+
+        .chat-open .chat-area {
+            display: flex;
+        }
+
+        .chat-area.chat-visible {
+            display: flex;
+        }
+
+        .chat-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .back-btn {
+            display: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .back-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .chat-task-title {
+            font-size: 15px;
+            font-weight: 600;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .close-chat-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-tertiary);
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all var(--transition-fast);
+        }
+
+        .close-chat-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            margin-left: auto;
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .message.agent .message-avatar {
+            background: var(--accent);
+            color: white;
+        }
+
+        .message.user .message-avatar {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .message-bubble {
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .message.agent .message-bubble {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-top-left-radius: 4px;
+        }
+
+        .message.user .message-bubble {
+            background: var(--accent);
+            color: white;
+            border-top-right-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            padding: 0 4px;
+        }
+
+        .message.user .message-time {
+            text-align: right;
+        }
+
+        /* Rich content cards in chat */
+        .progress-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+            margin-top: 8px;
+            min-width: 280px;
+        }
+
+        .progress-title {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-bar-bg {
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .progress-bar-fill.amber {
+            background: var(--amber);
+        }
+
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .step-check {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid var(--border-strong);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .step-check.done {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .step-check.active {
+            border-color: var(--amber);
+            color: var(--amber);
+        }
+
+        .draft-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 8px;
+            min-width: 280px;
+        }
+
+        .draft-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .draft-title {
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .draft-preview {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            max-height: 120px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .draft-preview::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: linear-gradient(transparent, var(--bg-tertiary));
+        }
+
+        .draft-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            background: var(--accent);
+            color: white;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background var(--transition-fast);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-outline {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-strong);
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-outline:hover {
+            background: var(--bg-hover);
+        }
+
+        /* Chat Input */
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px 8px 8px 16px;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .chat-input-wrapper:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            min-height: 24px;
+            padding: 4px 0;
+            font-family: inherit;
+        }
+
+        .chat-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background var(--transition-fast);
+        }
+
+        .send-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .chat-input-hint {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        /* Empty chat hint */
+        .empty-kanban-hint {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-tertiary);
+            gap: 12px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .empty-kanban-icon {
+            font-size: 48px;
+            opacity: 0.3;
+        }
+
+        .empty-kanban-text {
+            font-size: 14px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-tertiary);
+        }
+
+        /* ==================== Mobile Responsive ==================== */
+        @media (max-width: 768px) {
+            .top-bar {
+                padding: 0 12px;
+                gap: 10px;
+            }
+
+            .menu-btn {
+                display: flex;
+            }
+
+            .logo {
+                font-size: 16px;
+            }
+
+            .search-box {
+                max-width: none;
+            }
+
+            .search-box input {
+                height: 36px;
+                font-size: 13px;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 56px;
+                bottom: 0;
+                transform: translateX(-100%);
+                box-shadow: var(--shadow);
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                position: relative;
+            }
+
+            .kanban-area {
+                flex: 1 !important;
+                min-width: 0 !important;
+                border-right: none;
+            }
+
+            .chat-open .kanban-area {
+                display: none;
+            }
+
+            .chat-area {
+                position: fixed;
+                inset: 56px 0 0 0;
+                flex: none;
+                width: 100%;
+                transform: translateX(100%);
+                z-index: 100;
+                background: var(--bg-primary);
+                display: flex !important;
+                border-left: none;
+            }
+
+            .chat-area.chat-visible {
+                transform: translateX(0);
+            }
+
+            .back-btn {
+                display: flex;
+            }
+
+            .close-chat-btn {
+                display: none;
+            }
+
+            .chat-header {
+                padding: 12px 16px;
+            }
+
+            .chat-messages {
+                padding: 16px;
+                gap: 16px;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+
+            .message-bubble {
+                font-size: 13px;
+                padding: 8px 12px;
+            }
+
+            .chat-input-area {
+                padding: 12px 16px;
+            }
+
+            .kanban-header {
+                padding: 12px 16px;
+            }
+
+            .kanban-columns {
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .kanban-column {
+                flex: 0 0 160px;
+            }
+
+            .progress-card,
+            .draft-card {
+                min-width: auto;
+            }
+
+            .draft-actions {
+                flex-direction: column;
+            }
+
+            .draft-actions button {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .kanban-column {
+                flex: 0 0 150px;
+            }
+
+            .card-title {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container" id="appContainer">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <button class="menu-btn" id="menuBtn" title="菜单">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="logo">Async Agent</div>
+            <div class="search-box">
+                <span class="search-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </span>
+                <input type="text" placeholder="输入指令快速触发 Agent...  例如: 帮我写本周周报">
+            </div>
+            <div class="top-actions">
+                <button class="icon-btn" id="themeBtn" title="切换主题">
+                    <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+                <div class="user-avatar">U</div>
+            </div>
+        </div>
+
+        <!-- Sidebar Overlay (mobile) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <div class="sidebar" id="sidebar">
+                <div class="nav-group">
+                    <div class="nav-group-title">浏览</div>
+                    <div class="nav-item active">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                            </svg>
+                        </span>
+                        <span>工作台</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </span>
+                        <span>对话</span>
+                    </div>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">工作流</div>
+                    <div class="nav-item">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                        </span>
+                        <span>触发器配置</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                        </span>
+                        <span>历史归档</span>
+                    </div>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-title">其他</div>
+                    <div class="nav-item">
+                        <span class="icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </span>
+                        <span>设置</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kanban Area -->
+            <div class="kanban-area" id="kanbanArea">
+                <div class="kanban-header">
+                    <div class="kanban-title">任务看板</div>
+                    <div class="kanban-actions">
+                        <button class="btn-secondary">筛选</button>
+                    </div>
+                </div>
+                <div class="kanban-columns" id="kanbanColumns">
+                    <!-- Column 1: Pending Trigger -->
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <div class="column-title">
+                                <span class="column-dot" style="background: var(--text-tertiary)"></span>
+                                待触发
+                            </div>
+                            <span class="column-count">3</span>
+                        </div>
+                        <div class="column-cards">
+                            <div class="kanban-card" data-task-id="1" onclick="openChat(this)">
+                                <div class="card-title">每周五下午写周报</div>
+                                <div class="card-meta">
+                                    <span>定时触发</span>
+                                    <span class="card-status"><span class="card-status-dot status-pending"></span>等待中</span>
+                                </div>
+                            </div>
+                            <div class="kanban-card" data-task-id="2" onclick="openChat(this)">
+                                <div class="card-title">GitHub Issue 分配</div>
+                                <div class="card-meta">
+                                    <span>事件触发</span>
+                                    <span class="card-status"><span class="card-status-dot status-pending"></span>等待中</span>
+                                </div>
+                            </div>
+                            <div class="kanban-card" data-task-id="3" onclick="openChat(this)">
+                                <div class="card-title">每日站会总结</div>
+                                <div class="card-meta">
+                                    <span>每日 9:00</span>
+                                    <span class="card-status"><span class="card-status-dot status-pending"></span>等待中</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Context Collection -->
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <div class="column-title">
+                                <span class="column-dot" style="background: var(--amber)"></span>
+                                上下文搜集
+                            </div>
+                            <span class="column-count">1</span>
+                        </div>
+                        <div class="column-cards">
+                            <div class="kanban-card running" data-task-id="4" onclick="openChat(this)">
+                                <div class="card-title">写本周周报</div>
+                                <div class="card-meta">
+                                    <span>5分钟前</span>
+                                    <span class="card-status"><span class="card-status-dot status-running"></span>进行中</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Draft Editing -->
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <div class="column-title">
+                                <span class="column-dot" style="background: var(--blue)"></span>
+                                草稿编辑
+                            </div>
+                            <span class="column-count">1</span>
+                        </div>
+                        <div class="column-cards">
+                            <div class="kanban-card" data-task-id="5" onclick="openChat(this)">
+                                <div class="card-title">总结昨天的会议</div>
+                                <div class="card-meta">
+                                    <span>1小时前</span>
+                                    <span class="card-status"><span class="card-status-dot status-draft"></span>待确认</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 4: Ready for Delivery -->
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <div class="column-title">
+                                <span class="column-dot" style="background: var(--accent)"></span>
+                                待交付
+                            </div>
+                            <span class="column-count">1</span>
+                        </div>
+                        <div class="column-cards">
+                            <div class="kanban-card" data-task-id="6" onclick="openChat(this)">
+                                <div class="card-title">整理 PR 描述</div>
+                                <div class="card-meta">
+                                    <span>2小时前</span>
+                                    <span class="card-status"><span class="card-status-dot status-ready"></span>准备好</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 5: Completed -->
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <div class="column-title">
+                                <span class="column-dot" style="background: var(--accent)"></span>
+                                已完成
+                            </div>
+                            <span class="column-count">8</span>
+                        </div>
+                        <div class="column-cards">
+                            <div class="kanban-card" data-task-id="7" onclick="openChat(this)">
+                                <div class="card-title">同步产品需求文档</div>
+                                <div class="card-meta">
+                                    <span>昨天</span>
+                                    <span class="card-status"><span class="card-status-dot status-done"></span>已交付</span>
+                                </div>
+                            </div>
+                            <div class="kanban-card" data-task-id="8" onclick="openChat(this)">
+                                <div class="card-title">回复客户邮件</div>
+                                <div class="card-meta">
+                                    <span>昨天</span>
+                                    <span class="card-status"><span class="card-status-dot status-done"></span>已交付</span>
+                                </div>
+                            </div>
+                            <div class="kanban-card" data-task-id="9" onclick="openChat(this)">
+                                <div class="card-title">生成 Release Note</div>
+                                <div class="card-meta">
+                                    <span>3天前</span>
+                                    <span class="card-status"><span class="card-status-dot status-done"></span>已交付</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area" id="chatArea">
+                <div class="chat-header">
+                    <button class="back-btn" id="backBtn" title="返回">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <div class="chat-task-title" id="chatTaskTitle">总结昨天的会议</div>
+                    <div class="chat-status" id="chatStatus" style="background: var(--blue-bg); color: var(--blue);">草稿待确认</div>
+                    <button class="close-chat-btn" id="closeChatBtn" title="关闭对话">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message user">
+                        <div class="message-avatar">U</div>
+                        <div class="message-content">
+                            <div class="message-bubble">帮我总结一下昨天下午的产品评审会议，整理成会议纪要发送到 Notion</div>
+                            <div class="message-time">14:32</div>
+                        </div>
+                    </div>
+                    <div class="message agent">
+                        <div class="message-avatar">A</div>
+                        <div class="message-content">
+                            <div class="message-bubble">好的，我来帮你总结昨天的产品评审会议。正在搜集相关上下文...</div>
+                            <div class="progress-card">
+                                <div class="progress-title">
+                                    <span>上下文搜集进度</span>
+                                </div>
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill amber" style="width: 100%"></div>
+                                </div>
+                                <div class="progress-steps">
+                                    <div class="progress-step">
+                                        <span class="step-check done">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </span>
+                                        <span>从日历获取会议信息</span>
+                                    </div>
+                                    <div class="progress-step">
+                                        <span class="step-check done">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </span>
+                                        <span>拉取会议录音文字记录</span>
+                                    </div>
+                                    <div class="progress-step">
+                                        <span class="step-check done">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </span>
+                                        <span>获取相关 PRD 文档</span>
+                                    </div>
+                                    <div class="progress-step">
+                                        <span class="step-check done">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </span>
+                                        <span>整理讨论要点与决议</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="message-time">14:33</div>
+                        </div>
+                    </div>
+                    <div class="message agent">
+                        <div class="message-avatar">A</div>
+                        <div class="message-content">
+                            <div class="message-bubble">草稿已生成，请查看并确认：</div>
+                            <div class="draft-card">
+                                <div class="draft-header">
+                                    <div class="draft-title">会议纪要草稿</div>
+                                </div>
+                                <div class="draft-preview">
+                                    <strong>产品评审会议纪要 - 2026-06-27</strong><br><br>
+                                    <strong>参会人员</strong>：产品组、设计组、前端组、后端组代表<br><br>
+                                    <strong>讨论议题</strong>：<br>
+                                    1. 异步触发 Agent MVP 范围确认<br>
+                                    2. 触发器类型优先级排序<br>
+                                    3. 交付目标集成方案<br><br>
+                                    <strong>主要决议</strong>：<br>
+                                    - 首期支持定时触发和手动触发两种方式<br>
+                                    - 交付目标优先支持 Notion 和本地文件<br>
+                                    - UI 采用看板+对话双栏布局...
+                                </div>
+                                <div class="draft-actions">
+                                    <button class="btn-primary">确认并交付</button>
+                                    <button class="btn-outline">编辑草稿</button>
+                                </div>
+                            </div>
+                            <div class="message-time">14:34</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="chat-input-wrapper">
+                        <textarea class="chat-input" id="chatInput" placeholder="输入消息或新指令..." rows="1"></textarea>
+                        <button class="send-btn" title="发送">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="chat-input-hint">Enter 发送，Shift+Enter 换行</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const appContainer = document.getElementById('appContainer');
+        const chatArea = document.getElementById('chatArea');
+        const closeChatBtn = document.getElementById('closeChatBtn');
+        const backBtn = document.getElementById('backBtn');
+        const menuBtn = document.getElementById('menuBtn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const themeBtn = document.getElementById('themeBtn');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        const chatInput = document.getElementById('chatInput');
+
+        function isMobile() {
+            return window.innerWidth <= 768;
+        }
+
+        function openChat(card) {
+            document.querySelectorAll('.kanban-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+
+            const title = card.querySelector('.card-title').textContent;
+            document.getElementById('chatTaskTitle').textContent = title;
+
+            appContainer.classList.add('chat-open');
+
+            if (isMobile()) {
+                chatArea.classList.add('chat-visible');
+            }
+
+            setTimeout(() => {
+                const messages = document.getElementById('chatMessages');
+                messages.scrollTop = messages.scrollHeight;
+            }, 100);
+        }
+
+        function closeChat() {
+            appContainer.classList.remove('chat-open');
+            chatArea.classList.remove('chat-visible');
+            document.querySelectorAll('.kanban-card').forEach(c => c.classList.remove('selected'));
+        }
+
+        closeChatBtn.addEventListener('click', closeChat);
+        backBtn.addEventListener('click', closeChat);
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('show');
+            sidebarOverlay.classList.toggle('show');
+        }
+
+        menuBtn.addEventListener('click', toggleSidebar);
+        sidebarOverlay.addEventListener('click', toggleSidebar);
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                if (isMobile()) {
+                    toggleSidebar();
+                }
+            });
+        });
+
+        function updateThemeIcon() {
+            const isDark = html.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+            } else {
+                themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+            }
+        }
+
+        themeBtn.addEventListener('click', () => {
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon();
+        });
+
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        html.setAttribute('data-theme', savedTheme);
+        updateThemeIcon();
+
+        chatInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        chatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (!isMobile()) {
+                sidebar.classList.remove('show');
+                sidebarOverlay.classList.remove('show');
+                chatArea.classList.remove('chat-visible');
+            } else {
+                if (appContainer.classList.contains('chat-open')) {
+                    chatArea.classList.add('chat-visible');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

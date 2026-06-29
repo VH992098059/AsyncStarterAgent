@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MVP 定义 - 异步行动起跑器 Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Geist', system-ui, -apple-system, sans-serif; }
+    .gradient-text { background: linear-gradient(135deg, #10b981, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .glass-card { backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); background: rgba(24,24,27,0.8); border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 40px -15px rgba(0,0,0,0.3); }
+    .card-hover { transition: all 0.2s cubic-bezier(0.16,1,0.3,1); }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -15px rgba(0,0,0,0.4); }
+    .btn-hover { transition: all 0.2s cubic-bezier(0.16,1,0.3,1); }
+    .btn-hover:hover { transform: scale(0.98); }
+    .btn-hover:active { transform: scale(1.02); }
+    html { scroll-behavior: smooth; }
+    .nav-link { position: relative; transition: all 0.2s cubic-bezier(0.16,1,0.3,1); }
+    .nav-link::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 2px; background: #10b981; transition: width 0.3s cubic-bezier(0.16,1,0.3,1); }
+    .nav-link:hover::after { width: 100%; }
+    .progress-bar { transition: width 1.5s ease-in-out; }
+    .flow-arrow { width: 40px; height: 2px; background: linear-gradient(90deg, rgba(16,185,129,0.3), rgba(16,185,129,0.6)); position: relative; }
+    .flow-arrow::after { content: ''; position: absolute; right: -1px; top: -4px; border: 5px solid transparent; border-left-color: rgba(16,185,129,0.6); }
+    .timeline-line { position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: linear-gradient(to bottom, #10b981, rgba(16,185,129,0.1)); }
+    .section-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(16,185,129,0.2), transparent); }
+    .arch-layer { transition: all 0.2s cubic-bezier(0.16,1,0.3,1); }
+    .arch-layer:hover { transform: scale(1.01); border-color: rgba(16,185,129,0.3); }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+  </style>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Geist','system-ui','-apple-system','sans-serif'] }, colors: { zinc: { 950: '#09090b', 900: '#18181b', 800: '#27272a', 700: '#3f3f46' } } } } }
+  </script>
+</head>
+<body class="bg-[#09090b] text-zinc-100 min-h-screen">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <span class="font-semibold text-zinc-100 text-sm sm:text-base">Async Starter Agent</span>
+        </div>
+        <div class="flex items-center gap-1 sm:gap-4">
+          <a href="mvp-definition.html" class="nav-link px-2 sm:px-3 py-2 text-sm font-medium text-emerald-400">MVP定义</a>
+          <a href="task-tracker.html" class="nav-link px-2 sm:px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200">任务跟踪</a>
+          <a href="requirement-spec.html" class="nav-link px-2 sm:px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200">需求说明</a>
+          <a href="prototype.html" class="nav-link px-2 sm:px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200">原型UI</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+
+    <!-- Page Header -->
+    <div class="text-center mb-20">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium mb-6">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+        MVP Definition
+      </div>
+      <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
+        <span class="gradient-text">"完成前 30%"</span>
+        <br class="sm:hidden">
+        <span class="text-zinc-100"> 异步行动起跑器 Agent</span>
+      </h1>
+      <p class="text-zinc-400 text-lg max-w-2xl mx-auto">最小可行产品范围定义与核心价值阐述</p>
+    </div>
+
+    <!-- ====== Section 1: 项目愿景与核心价值 ====== -->
+    <section class="mb-20" id="vision">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">项目愿景与核心价值</h2>
+      </div>
+
+      <div class="glass-card rounded-2xl p-8 mb-6">
+        <div class="flex items-center gap-2 mb-5">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <h3 class="text-lg font-semibold text-zinc-100">核心愿景：消除冷启动摩擦力</h3>
+        </div>
+        <p class="text-zinc-300 leading-relaxed mb-5">每一次面对空白文档的瞬间，都是一次认知资源的消耗。心理学研究揭示了两个关键机制：<span class="text-emerald-400 font-semibold">蔡格尼克效应</span>表明，未完成的任务会在大脑中持续占据工作记忆空间，而"从零开始"正是最极端的未完成状态；<span class="text-emerald-400 font-semibold">启动成本理论</span>指出，任务启动阶段所需的认知负荷远高于后续执行阶段，人类大脑在"启动"和"惯性运行"两种模式之间切换时，会产生显著的心理阻力。</p>
+        <p class="text-zinc-300 leading-relaxed mb-5">Async Starter Agent 的核心愿景，就是将用户从"冷启动"的焦虑中彻底解放。当用户意识到需要完成一项文档任务时，Agent 已经在后台完成了信息搜集、框架搭建和草稿生成。用户不再是"面对白纸的创作者"，而是"站在已有基础上的审查者和完善者"——从 0 到 1 的心理鸿沟，被 Agent 填平为从 30% 到 100% 的渐进式完善。</p>
+        <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+          <p class="text-emerald-400 font-medium text-sm">产品定位声明：Async Starter Agent 是一款面向知识工作者的异步文档助手，通过事件驱动的后台 Agent 自动搜集个人上下文并生成文档草稿，消除"冷启动摩擦力"，让用户从零创作者变为高效审查者。</p>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6 mb-6">
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-zinc-100 mb-3">事件驱动的后台异步 Agent</h3>
+          <p class="text-zinc-400 text-sm leading-relaxed">Agent 不依赖用户主动发起请求，而是持续监听用户工作环境中的事件信号——任务创建、DDL 临近、笔记更新等。一旦检测到触发条件，Agent 在后台自动启动工作流，无需用户等待或干预，实现真正的"零摩擦"启动体验。</p>
+        </div>
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-zinc-100 mb-3">个人上下文 RAG</h3>
+          <p class="text-zinc-400 text-sm leading-relaxed">通过检索增强生成（RAG）技术，Agent 能够从用户的 GitHub 提交记录、日历事件、IM 沟通记录、个人笔记等多源数据中提取与当前任务高度相关的上下文信息。这些信息经过向量化索引和语义检索，确保生成的草稿不仅格式正确，更包含用户真实的工作内容和项目细节。</p>
+        </div>
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <h3 class="text-base font-semibold text-zinc-100 mb-3">自动化文档工作流</h3>
+          <p class="text-zinc-400 text-sm leading-relaxed">从触发到交付的完整工作流自动化：Agent 自动选择合适的文档模板，将搜集到的上下文信息填充到模板结构中，通过 LLM 生成连贯的草稿内容，标记需要用户决策的待补充位置，最终将完成的草稿交付到用户指定的文档平台（Notion/Obsidian），形成闭环。</p>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-8">
+        <div class="flex items-center gap-2 mb-6">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <h3 class="text-lg font-semibold text-zinc-100">核心价值量化</h3>
+        </div>
+        <div class="flex flex-col sm:flex-row items-center gap-8">
+          <div class="flex-1"><p class="text-zinc-300 leading-relaxed">用户只需扮演<span class="text-emerald-400 font-semibold">"审查者"</span>和<span class="text-emerald-400 font-semibold">"修改者"</span>，而非"从零开始的创作者"。Agent 在后台默默完成信息搜集、框架搭建和草稿生成，将任务启动成本降低 70%。草稿完成度达到 30% 以上，意味着用户面对的不再是空白页面，而是一个有结构、有内容、可修改的半成品。</p></div>
+          <div class="flex-shrink-0 flex items-center gap-2">
+            <div class="text-center px-6"><div class="text-4xl font-bold text-emerald-400">70%</div><div class="text-xs text-zinc-500 mt-1">启动成本降低</div></div>
+            <div class="w-px h-12 bg-zinc-700"></div>
+            <div class="text-center px-6"><div class="text-4xl font-bold text-emerald-400">30%+</div><div class="text-xs text-zinc-500 mt-1">草稿完成度</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 2: 目标用户画像 ====== -->
+    <section class="mb-20" id="personas">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">目标用户画像</h2>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+            </div>
+            <div><h3 class="text-base font-semibold text-zinc-100">陈默</h3><p class="text-zinc-500 text-xs">28岁 / 独立开发者</p></div>
+          </div>
+          <div class="space-y-3">
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">职业</span><p class="text-zinc-300 text-sm">全栈开发工程师，远程工作，同时维护 2-3 个个人项目</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">核心痛点</span><p class="text-zinc-300 text-sm">每周五写周报是最痛苦的时刻——需要翻遍 GitHub 提交记录、回忆 Slack 讨论内容、对照日历回忆会议，整个流程耗时 40-60 分钟，且经常遗漏重要工作项</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">常用工具</span><div class="flex flex-wrap gap-1.5 mt-1"><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">GitHub</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Slack</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">VS Code</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Todoist</span></div></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">期望场景</span><p class="text-zinc-300 text-sm">在 Todoist 创建"写周报"任务后，Agent 自动拉取本周 GitHub commits、PRs、reviews 和 Slack 关键讨论，生成结构化周报草稿，只需 10 分钟审阅修改即可完成</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+            </div>
+            <div><h3 class="text-base font-semibold text-zinc-100">林薇</h3><p class="text-zinc-500 text-xs">35岁 / 项目经理</p></div>
+          </div>
+          <div class="space-y-3">
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">职业</span><p class="text-zinc-300 text-sm">技术项目经理，同时管理 3 个跨职能团队，每周需要产出项目进度报告和里程碑总结</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">核心痛点</span><p class="text-zinc-300 text-sm">进度报告需要汇总多个团队的工作状态，但信息散落在飞书群聊、日历会议和各项目看板中，每周花费 2-3 小时整理数据，格式化输出，严重影响核心管理工作时间</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">常用工具</span><div class="flex flex-wrap gap-1.5 mt-1"><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">飞书</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Google Calendar</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Notion</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Jira</span></div></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">期望场景</span><p class="text-zinc-300 text-sm">DDL 前一天自动触发报告生成，Agent 从飞书拉取各团队周报摘要、从日历提取关键会议决策、从 Notion 获取项目文档更新，生成格式统一的进度报告草稿</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            </div>
+            <div><h3 class="text-base font-semibold text-zinc-100">张远</h3><p class="text-zinc-500 text-xs">31岁 / 产品经理</p></div>
+          </div>
+          <div class="space-y-3">
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">职业</span><p class="text-zinc-300 text-sm">产品经理，负责 B 端产品线，频繁参与需求评审、用户调研和方案讨论，是 Obsidian 笔记的重度用户</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">核心痛点</span><p class="text-zinc-300 text-sm">每次会议后需要整理纪要、关联参会人信息、提炼行动项，但手动整理耗时且容易遗漏关键决策；方案文档需要从散落的笔记中提取素材，组织成本极高</p></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">常用工具</span><div class="flex flex-wrap gap-1.5 mt-1"><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Obsidian</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">飞书</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Notion</span><span class="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-xs">Outlook</span></div></div>
+            <div><span class="text-xs text-zinc-500 uppercase tracking-wider">期望场景</span><p class="text-zinc-300 text-sm">在 Obsidian 新建会议纪要笔记后，Agent 自动关联日历中的会议信息（主题、参会人、时间），从飞书拉取相关讨论上下文，生成结构化的会议纪要模板，标记待确认的决策点</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 3: MVP 范围定义 ====== -->
+    <section class="mb-20" id="scope">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">MVP 范围定义</h2>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <!-- IN -->
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500">
+          <div class="flex items-center gap-2 mb-6">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-sm">IN</span>
+            <h3 class="text-lg font-semibold text-emerald-400">MVP 包含</h3>
+          </div>
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">关键词触发</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">支持前缀匹配模式（"写..."、"准备..."、"规划..."、"整理..."）和包含匹配模式（任务描述中包含"周报"、"总结"、"纪要"等关键词）。匹配规则可配置，支持正则表达式扩展。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">DDL 触发</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">检测任务管理工具中的截止日期，默认在 DDL 前 24 小时自动触发准备流程。提前量可配置（12h/24h/48h），支持按任务优先级差异化配置提前量。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">GitHub 适配</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">通过 GitHub REST API / GraphQL API 拉取用户关联仓库的 commits（含 message 和 diff 摘要）、Pull Requests（标题/描述/状态）、Issues（状态变更/评论）和 Code Reviews（评审意见）。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">日历适配</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">支持 Google Calendar 和 Outlook Calendar，通过 OAuth2 授权拉取指定时间范围内的日历事件，提取会议主题、参会人列表、会议时间和时长等结构化信息。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">IM 适配</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">拉取用户在飞书/Slack 中发送的消息、标记为待办的讨论帖、以及订阅频道的每日摘要。通过关键词过滤和时间窗口限定，仅提取与当前任务相关的沟通内容。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">笔记适配</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">Obsidian 通过本地文件系统监听 vault 目录变更（fsnotify），读取 Markdown 文件内容；Notion 通过官方 API 读取指定数据库和页面。两者差异：Obsidian 为本地实时监听，Notion 为 API 轮询（间隔可配置）。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">模板引擎</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">内置周报、项目总结、会议纪要、规划方案四类模板，采用 YAML Front Matter + Markdown 正文格式。模板支持变量插值（如 {{date_range}}、{{project_name}}）和条件区块。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">LLM 草稿生成</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">采用"骨架+填充"策略：先根据模板生成文档骨架（章节标题、列表结构），再基于 RAG 检索的上下文填充具体内容，控制完成度在 30-40%。MVP 阶段使用 GPT-4o / Claude 3.5 Sonnet 作为生成模型。</p></div>
+            <div class="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span class="text-zinc-200 text-sm font-medium">[待补充] 标记</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">在草稿中标记需要用户决策或补充信息的位置。标记逻辑：当 LLM 缺乏足够上下文生成确定性内容时（置信度低于阈值），自动插入 [待补充] 标记并附带提示说明（如"[待补充: 请确认Q2目标数据]"）。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">Notion 交付</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">通过 Notion API 将草稿写入用户指定的 Database 或 Page 下，自动创建页面层级结构（标题/正文/待补充区块），保留 Markdown 格式并转换为 Notion Block 格式。</p></div>
+            <div class="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span class="text-zinc-200 text-sm font-medium">SSE 流式输出</span></div><p class="text-zinc-400 text-xs leading-relaxed ml-6">后端通过 Server-Sent Events 推送生成进度，前端通过 EventSource API 消费。SSE 事件类型包括：status（阶段状态更新）、chunk（文本片段）、complete（生成完成）、error（异常信息），实现实时流式渲染。</p></div>
+          </div>
+        </div>
+
+        <!-- OUT -->
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-red-500/50">
+          <div class="flex items-center gap-2 mb-6">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/20 text-red-400 font-bold text-sm">OUT</span>
+            <h3 class="text-lg font-semibold text-red-400">MVP 不包含</h3>
+          </div>
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg bg-red-500/5 border border-red-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-zinc-400 text-sm font-medium line-through decoration-red-500/40">语音唤醒</span></div><p class="text-zinc-500 text-xs leading-relaxed ml-6">排除原因：语音交互涉及 ASR 准确率、噪声环境处理等复杂技术问题，且 MVP 目标用户主要为桌面端知识工作者，文本触发已满足核心场景。预计纳入：MVP 后第 2 个迭代。</p></div>
+            <div class="p-3 rounded-lg bg-red-500/5 border border-red-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-zinc-400 text-sm font-medium line-through decoration-red-500/40">移动端推送</span></div><p class="text-zinc-500 text-xs leading-relaxed ml-6">排除原因：移动端推送需要 APNs/FCM 集成、移动端 UI 适配，且 MVP 阶段 SSE + 桌面通知已能覆盖"草稿就绪提醒"场景。预计纳入：MVP 后第 1 个迭代。</p></div>
+            <div class="p-3 rounded-lg bg-red-500/5 border border-red-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-zinc-400 text-sm font-medium line-through decoration-red-500/40">多用户协作</span></div><p class="text-zinc-500 text-xs leading-relaxed ml-6">排除原因：协作功能需要权限系统、实时同步、冲突解决等基础设施，架构复杂度远超 MVP 范围。MVP 聚焦单用户场景验证核心价值。预计纳入：V2.0。</p></div>
+            <div class="p-3 rounded-lg bg-red-500/5 border border-red-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-zinc-400 text-sm font-medium line-through decoration-red-500/40">自定义 Prompt 编辑器</span></div><p class="text-zinc-500 text-xs leading-relaxed ml-6">排除原因：Prompt 编辑器需要代码编辑器组件、语法高亮、变量提示等 UI 基础设施，且 MVP 阶段内置模板已覆盖核心场景，用户自定义需求需通过用户反馈验证。预计纳入：V1.5。</p></div>
+            <div class="p-3 rounded-lg bg-red-500/5 border border-red-500/10"><div class="flex items-center gap-2 mb-1"><svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg><span class="text-zinc-400 text-sm font-medium line-through decoration-red-500/40">数据分析报表</span></div><p class="text-zinc-500 text-xs leading-relaxed ml-6">排除原因：数据分析需要数据仓库、ETL 管道和可视化组件，属于增值功能而非核心链路。MVP 需先验证"草稿生成"的核心价值，再考虑分析能力。预计纳入：V2.0。</p></div>
+          </div>
+          <div class="mt-6 p-4 rounded-xl bg-zinc-800/50 border border-zinc-700"><p class="text-zinc-500 text-xs leading-relaxed"><span class="text-zinc-400 font-medium">说明：</span>以上功能将在后续迭代中根据用户反馈和优先级评估逐步纳入。MVP 阶段聚焦于核心链路的打通和验证，确保"触发-搜集-生成-交付"的端到端流程可用。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 4: 核心用户故事 ====== -->
+    <section class="mb-20" id="stories">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">核心用户故事</h2>
+      </div>
+
+      <div class="space-y-5">
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500 card-hover"><div class="flex items-start gap-4"><div class="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><span class="text-emerald-400 font-bold text-sm">01</span></div><div class="flex-1"><h3 class="text-base font-semibold text-zinc-100 mb-3">关键词触发周报</h3><div class="grid sm:grid-cols-2 gap-4"><div><span class="text-xs text-zinc-500 uppercase tracking-wider">触发条件</span><p class="text-zinc-300 text-sm mt-1">用户在 Todoist 创建新任务，标题为"写本周周报"，关键词"周报"命中触发规则</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">Agent 行为</span><p class="text-zinc-300 text-sm mt-1">1) 识别触发类型为"周报" 2) 确定时间范围为本周一至今 3) 并行拉取 GitHub commits/PRs、日历事件、Slack 关键消息 4) 选择周报模板 5) 通过 LLM 生成草稿 6) 标记待补充位置</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">用户操作</span><p class="text-zinc-300 text-sm mt-1">收到桌面通知"周报草稿已生成"，打开草稿页面，审阅各章节内容，修改不准确之处，补充[待补充]标记位置的细节信息</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">预期结果</span><p class="text-zinc-300 text-sm mt-1">从创建任务到收到草稿通知不超过 30 秒，草稿包含本周工作摘要、关键进展、下周计划三部分，完成度约 35%</p></div></div><div class="mt-3 pt-3 border-t border-zinc-800"><span class="text-xs text-zinc-500 uppercase tracking-wider">成功标准</span><p class="text-zinc-400 text-sm mt-1">用户修改时间 &lt; 10 分钟，修改率 &lt; 50%，最终文档包含至少 3 个数据源的信息</p></div></div></div></div>
+
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/70 card-hover"><div class="flex items-start gap-4"><div class="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><span class="text-emerald-400 font-bold text-sm">02</span></div><div class="flex-1"><h3 class="text-base font-semibold text-zinc-100 mb-3">DDL 触发规划</h3><div class="grid sm:grid-cols-2 gap-4"><div><span class="text-xs text-zinc-500 uppercase tracking-wider">触发条件</span><p class="text-zinc-300 text-sm mt-1">用户在任务管理工具中设定的"Q2 规划文档"截止日期为周五，系统在周四上午自动检测到 DDL 临近（提前 24h）</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">Agent 行为</span><p class="text-zinc-300 text-sm mt-1">1) 检测到 DDL 触发 2) 拉取本周未完成的任务列表 3) 搜集下周日历中的会议和里程碑 4) 从笔记中检索相关规划素材 5) 选择规划模板 6) 生成包含"本周回顾+下周计划"的草稿</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">用户操作</span><p class="text-zinc-300 text-sm mt-1">收到通知"下周规划草稿已准备"，打开草稿，确认未完成事项是否需要顺延，补充下周重点目标的量化指标，调整优先级排序</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">预期结果</span><p class="text-zinc-300 text-sm mt-1">草稿自动归类本周已完成/未完成事项，下周计划基于日历事件生成时间线框架，完成度约 30%</p></div></div><div class="mt-3 pt-3 border-t border-zinc-800"><span class="text-xs text-zinc-500 uppercase tracking-wider">成功标准</span><p class="text-zinc-400 text-sm mt-1">DDL 触发准确率 100%，草稿在 DDL 前 24h 准时生成，未完成事项无遗漏</p></div></div></div></div>
+
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/50 card-hover"><div class="flex items-start gap-4"><div class="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><span class="text-emerald-400 font-bold text-sm">03</span></div><div class="flex-1"><h3 class="text-base font-semibold text-zinc-100 mb-3">笔记触发会议纪要</h3><div class="grid sm:grid-cols-2 gap-4"><div><span class="text-xs text-zinc-500 uppercase tracking-wider">触发条件</span><p class="text-zinc-300 text-sm mt-1">用户在 Obsidian vault 中新建笔记，文件名包含"会议"或标签包含 #meeting，Agent 通过 fsnotify 检测到文件创建事件</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">Agent 行为</span><p class="text-zinc-300 text-sm mt-1">1) 识别触发类型为"会议纪要" 2) 从日历查找最近 24h 内的会议事件 3) 提取会议主题、参会人、时间 4) 从飞书/Slack 检索相关讨论 5) 生成结构化纪要模板（议题/讨论/决策/行动项）</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">用户操作</span><p class="text-zinc-300 text-sm mt-1">在 Obsidian 中看到自动补充的会议背景信息，填写讨论内容和决策要点，确认行动项的负责人和截止日期</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">预期结果</span><p class="text-zinc-300 text-sm mt-1">笔记自动填充会议元信息（主题/参会人/时间），生成"议题-讨论-决策-行动项"四段式模板，完成度约 35%</p></div></div><div class="mt-3 pt-3 border-t border-zinc-800"><span class="text-xs text-zinc-500 uppercase tracking-wider">成功标准</span><p class="text-zinc-400 text-sm mt-1">日历关联准确率 &gt; 90%，参会人信息无遗漏，模板结构完整</p></div></div></div></div>
+
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/30 card-hover"><div class="flex items-start gap-4"><div class="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><span class="text-emerald-400 font-bold text-sm">04</span></div><div class="flex-1"><h3 class="text-base font-semibold text-zinc-100 mb-3">草稿审查与交付</h3><div class="grid sm:grid-cols-2 gap-4"><div><span class="text-xs text-zinc-500 uppercase tracking-wider">触发条件</span><p class="text-zinc-300 text-sm mt-1">Agent 完成草稿生成后，通过桌面通知提醒用户"周报草稿已就绪，点击查看"</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">Agent 行为</span><p class="text-zinc-300 text-sm mt-1">1) 推送草稿就绪通知 2) 在编辑器中打开草稿，高亮[待补充]标记位置 3) 用户修改后检测变更 4) 确认交付后，通过 Notion API 创建页面并写入内容 5) 返回交付确认和页面链接</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">用户操作</span><p class="text-zinc-300 text-sm mt-1">点击通知打开草稿，逐段审阅，修改不准确的内容，补充[待补充]位置，点击"确认交付"按钮，选择目标 Notion 页面位置</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">预期结果</span><p class="text-zinc-300 text-sm mt-1">草稿自动同步到 Notion 指定位置，保留格式和层级结构，[待补充]标记转为 Notion Callout Block 提醒，交付过程无需手动复制粘贴</p></div></div><div class="mt-3 pt-3 border-t border-zinc-800"><span class="text-xs text-zinc-500 uppercase tracking-wider">成功标准</span><p class="text-zinc-400 text-sm mt-1">Notion 写入成功率 &gt; 99%，格式保真度 &gt; 95%，交付耗时 &lt; 5 秒</p></div></div></div></div>
+
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/20 card-hover"><div class="flex items-start gap-4"><div class="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><span class="text-emerald-400 font-bold text-sm">05</span></div><div class="flex-1"><h3 class="text-base font-semibold text-zinc-100 mb-3">实时状态监控</h3><div class="grid sm:grid-cols-2 gap-4"><div><span class="text-xs text-zinc-500 uppercase tracking-wider">触发条件</span><p class="text-zinc-300 text-sm mt-1">用户主动打开 Agent 状态面板，或 Agent 开始执行任务时自动弹出进度窗口</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">Agent 行为</span><p class="text-zinc-300 text-sm mt-1">1) 通过 SSE 推送各阶段状态（触发确认/数据搜集/模板选择/草稿生成/交付就绪）2) 实时推送 LLM 生成的文本片段 3) 显示各数据源的搜集进度 4) 异常时推送错误信息和重试状态</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">用户操作</span><p class="text-zinc-300 text-sm mt-1">在状态面板中实时观察 Agent 工作进度，看到数据搜集阶段拉取了哪些数据源，草稿逐步生成（文字逐字出现），无需等待全部完成即可开始审阅已生成部分</p></div><div><span class="text-xs text-zinc-500 uppercase tracking-wider">预期结果</span><p class="text-zinc-300 text-sm mt-1">状态面板实时更新，SSE 延迟 &lt; 200ms，草稿文字流式渲染无卡顿，各阶段状态转换清晰可见</p></div></div><div class="mt-3 pt-3 border-t border-zinc-800"><span class="text-xs text-zinc-500 uppercase tracking-wider">成功标准</span><p class="text-zinc-400 text-sm mt-1">SSE 连接稳定性 &gt; 99.5%，首字节延迟 &lt; 3 秒，用户可感知到实时进度更新</p></div></div></div></div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 5: 功能模块划分 ====== -->
+    <section class="mb-20" id="modules">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">功能模块划分</h2>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-6 mb-8">
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5"><div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"><svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div><div><h3 class="text-lg font-semibold text-zinc-100">触发引擎</h3><p class="text-emerald-400 text-xs">Trigger Engine</p></div></div>
+          <div class="space-y-4">
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">关键词匹配</div><div class="text-zinc-500 text-xs space-y-1"><p><span class="text-emerald-400">输入：</span>任务标题/描述文本</p><p><span class="text-emerald-400">处理：</span>正则匹配预定义关键词模式，支持前缀（"写..."）和包含（"周报"）两种模式，匹配后映射到对应文档类型</p><p><span class="text-emerald-400">输出：</span>触发事件（含文档类型、时间范围、优先级）</p></div></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">DDL 检测</div><div class="text-zinc-500 text-xs space-y-1"><p><span class="text-emerald-400">输入：</span>任务管理工具中的截止日期字段</p><p><span class="text-emerald-400">处理：</span>定时轮询（每 30 分钟）检查即将到期的任务，计算当前时间与 DDL 的差值，匹配提前量配置</p><p><span class="text-emerald-400">输出：</span>DDL 触发事件（含任务信息、剩余时间、建议文档类型）</p></div></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">文件变更监听</div><div class="text-zinc-500 text-xs space-y-1"><p><span class="text-emerald-400">输入：</span>Obsidian vault 目录的文件系统事件</p><p><span class="text-emerald-400">处理：</span>通过 fsnotify 监听文件创建/修改事件，解析文件名和标签判断文档类型</p><p><span class="text-emerald-400">输出：</span>文件触发事件（含文件路径、文档类型、变更类型）</p></div></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5"><div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"><svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg></div><div><h3 class="text-lg font-semibold text-zinc-100">上下文搜集器</h3><p class="text-emerald-400 text-xs">Context Collector</p></div></div>
+          <div class="space-y-4">
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">GitHub 适配器</div><p class="text-zinc-500 text-xs">通过 GitHub REST API v4 拉取数据。使用 GraphQL 批量查询减少 API 调用次数，按时间范围过滤 commits/PRs/issues/reviews，结果缓存至本地 SQLite（TTL 5 分钟）。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">日历适配器</div><p class="text-zinc-500 text-xs">Google Calendar 使用 Calendar API v3 + OAuth2 授权，Outlook 使用 Microsoft Graph API。拉取指定时间范围的 events 资源，提取 summary/attendees/start/end 字段。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">IM 适配器</div><p class="text-zinc-500 text-xs">飞书通过开放平台 API v2 拉取消息列表，Slack 通过 Web API + Bolt SDK。支持关键词过滤和时间窗口限定，仅提取与触发任务相关的消息线程。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">笔记适配器</div><p class="text-zinc-500 text-xs">Obsidian 通过 fsnotify 监听本地 vault 目录变更，直接读取 Markdown 文件；Notion 通过官方 API v1 的 search/databases/query 端点检索相关页面，支持全文搜索和属性过滤。</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5"><div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"><svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></div><div><h3 class="text-lg font-semibold text-zinc-100">草稿生成器</h3><p class="text-emerald-400 text-xs">Draft Generator</p></div></div>
+          <div class="space-y-4">
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">模板选择与变量插值</div><p class="text-zinc-500 text-xs">根据触发事件类型自动匹配模板，将触发元数据（日期范围、项目名等）注入模板变量，生成初始骨架文档。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">RAG 上下文注入</div><p class="text-zinc-500 text-xs">将搜集到的多源上下文向量化后检索与模板各章节最相关的内容片段，按章节组织后注入生成 Prompt。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">[待补充] 标记生成</div><p class="text-zinc-500 text-xs">LLM 输出后处理阶段，检测低置信度内容（通过 logprob 或结构化输出判断），自动插入标记和提示说明。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">Eino 编排的 5 阶段 DAG</div><p class="text-zinc-500 text-xs">使用 Eino 框架编排生成流水线：Stage1 模板解析 → Stage2 上下文检索 → Stage3 骨架生成 → Stage4 内容填充 → Stage5 标记与校验。各阶段可独立重试，支持断点续生成。</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 card-hover">
+          <div class="flex items-center gap-3 mb-5"><div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center"><svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></div><div><h3 class="text-lg font-semibold text-zinc-100">交付管道</h3><p class="text-emerald-400 text-xs">Delivery Pipeline</p></div></div>
+          <div class="space-y-4">
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">Notion API 写入</div><p class="text-zinc-500 text-xs">通过 Notion API v1 的 pages/create 端点创建页面，使用 blocks/children/append 追加内容块。Markdown 转 Notion Block 格式，[待补充]标记转为 Callout Block。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">Obsidian 文件写入</div><p class="text-zinc-500 text-xs">直接写入用户 vault 目录下的指定路径，保留 Markdown 格式，[待补充]标记使用 Obsidian Callout 语法（&gt; [!warning] 待补充）。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-200 text-sm font-medium mb-2">SSE 流式通知</div><p class="text-zinc-500 text-xs">草稿就绪后通过 SSE 推送 complete 事件，包含草稿 ID 和预览链接。前端 EventSource 监听后触发桌面通知（Web Notification API）。</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 数据流图 -->
+      <div class="glass-card rounded-2xl p-8">
+        <h3 class="text-sm font-medium text-zinc-400 mb-6 text-center">模块间数据流</h3>
+        <div class="flex items-center justify-center gap-0 flex-wrap">
+          <div class="px-5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium text-center"><div class="text-xs text-emerald-500 mb-1">Stage 1</div>触发引擎</div>
+          <div class="flow-arrow flex-shrink-0 mx-2 sm:mx-4 hidden sm:block"></div>
+          <svg class="w-6 h-6 text-emerald-500/50 flex-shrink-0 mx-1 sm:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          <div class="px-5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium text-center"><div class="text-xs text-emerald-500 mb-1">Stage 2</div>上下文搜集器</div>
+          <div class="flow-arrow flex-shrink-0 mx-2 sm:mx-4 hidden sm:block"></div>
+          <svg class="w-6 h-6 text-emerald-500/50 flex-shrink-0 mx-1 sm:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          <div class="px-5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium text-center"><div class="text-xs text-emerald-500 mb-1">Stage 3</div>草稿生成器</div>
+          <div class="flow-arrow flex-shrink-0 mx-2 sm:mx-4 hidden sm:block"></div>
+          <svg class="w-6 h-6 text-emerald-500/50 flex-shrink-0 mx-1 sm:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          <div class="px-5 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium text-center"><div class="text-xs text-emerald-500 mb-1">Stage 4</div>交付管道</div>
+        </div>
+        <div class="mt-4 text-center text-xs text-zinc-600">触发事件 → 多源上下文数据 → 结构化草稿 + [待补充]标记 → 交付到 Notion/Obsidian + 通知推送</div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 6: 竞品分析 ====== -->
+    <section class="mb-20" id="competition">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">竞品分析</h2>
+      </div>
+
+      <div class="glass-card rounded-2xl p-6 mb-6 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="border-b border-zinc-800"><th class="text-left py-3 px-4 text-zinc-400 font-medium">对比维度</th><th class="text-center py-3 px-4 text-emerald-400 font-medium">Async Starter</th><th class="text-center py-3 px-4 text-zinc-400 font-medium">Notion AI</th><th class="text-center py-3 px-4 text-zinc-400 font-medium">GitHub Copilot</th><th class="text-center py-3 px-4 text-zinc-400 font-medium">Reclaim.ai</th></tr></thead>
+          <tbody class="text-zinc-300">
+            <tr class="border-b border-zinc-800/50"><td class="py-3 px-4 text-zinc-400">自动触发</td><td class="py-3 px-4 text-center"><span class="inline-flex items-center gap-1 text-emerald-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> 事件驱动</span></td><td class="py-3 px-4 text-center text-zinc-500">手动触发</td><td class="py-3 px-4 text-center text-zinc-500">手动触发</td><td class="py-3 px-4 text-center text-zinc-500">定时触发</td></tr>
+            <tr class="border-b border-zinc-800/50"><td class="py-3 px-4 text-zinc-400">上下文搜集</td><td class="py-3 px-4 text-center"><span class="inline-flex items-center gap-1 text-emerald-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> 多源 RAG</span></td><td class="py-3 px-4 text-center text-zinc-500">当前页面</td><td class="py-3 px-4 text-center text-zinc-500">当前文件</td><td class="py-3 px-4 text-center text-zinc-500">日历数据</td></tr>
+            <tr class="border-b border-zinc-800/50"><td class="py-3 px-4 text-zinc-400">草稿生成</td><td class="py-3 px-4 text-center"><span class="inline-flex items-center gap-1 text-emerald-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> 模板+填充</span></td><td class="py-3 px-4 text-center text-zinc-500">通用写作</td><td class="py-3 px-4 text-center text-zinc-500">代码补全</td><td class="py-3 px-4 text-center text-zinc-500">不生成</td></tr>
+            <tr class="border-b border-zinc-800/50"><td class="py-3 px-4 text-zinc-400">交付集成</td><td class="py-3 px-4 text-center"><span class="inline-flex items-center gap-1 text-emerald-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> 多平台</span></td><td class="py-3 px-4 text-center text-zinc-500">Notion 内</td><td class="py-3 px-4 text-center text-zinc-500">IDE 内</td><td class="py-3 px-4 text-center text-zinc-500">日历内</td></tr>
+            <tr><td class="py-3 px-4 text-zinc-400">个性化程度</td><td class="py-3 px-4 text-center"><span class="inline-flex items-center gap-1 text-emerald-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> 个人上下文</span></td><td class="py-3 px-4 text-center text-zinc-500">通用</td><td class="py-3 px-4 text-center text-zinc-500">代码上下文</td><td class="py-3 px-4 text-center text-zinc-500">日历上下文</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card rounded-2xl p-6 card-hover"><div class="flex items-center gap-2 mb-4"><div class="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center"><svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div><h3 class="text-base font-semibold text-zinc-200">Notion AI</h3></div><p class="text-zinc-400 text-sm leading-relaxed">通用 AI 写作助手，嵌入 Notion 编辑器中。用户需手动触发 AI 功能，AI 仅基于当前页面内容生成文本，不自动搜集外部上下文数据。适合通用写作场景，但无法实现"零摩擦"的自动化文档生成。</p></div>
+        <div class="glass-card rounded-2xl p-6 card-hover"><div class="flex items-center gap-2 mb-4"><div class="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center"><svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg></div><h3 class="text-base font-semibold text-zinc-200">GitHub Copilot</h3></div><p class="text-zinc-400 text-sm leading-relaxed">代码补全和生成工具，基于当前文件和项目上下文提供建议。聚焦于代码场景，不生成文档草稿（周报/总结/纪要），也不跨数据源搜集上下文。是代码领域的效率工具，但无法解决文档冷启动问题。</p></div>
+        <div class="glass-card rounded-2xl p-6 card-hover"><div class="flex items-center gap-2 mb-4"><div class="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center"><svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div><h3 class="text-base font-semibold text-zinc-200">Reclaim.ai</h3></div><p class="text-zinc-400 text-sm leading-relaxed">智能日程管理工具，自动为任务分配时间块、调整日历安排。聚焦于时间管理而非内容生成，不生成文档草稿，仅基于日历数据工作。解决了"时间安排"问题，但未解决"内容创作"的冷启动问题。</p></div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-6 mt-6 border border-emerald-500/20">
+        <div class="flex items-center gap-2 mb-4"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg><h3 class="text-base font-semibold text-emerald-400">我们的差异化优势</h3></div>
+        <div class="grid sm:grid-cols-3 gap-4">
+          <div class="p-3 rounded-lg bg-emerald-500/5"><div class="text-zinc-200 text-sm font-medium mb-1">事件驱动 + 自动触发</div><p class="text-zinc-500 text-xs">无需用户主动发起，Agent 在检测到触发条件后自动启动工作流，实现真正的零摩擦体验。</p></div>
+          <div class="p-3 rounded-lg bg-emerald-500/5"><div class="text-zinc-200 text-sm font-medium mb-1">多源个人上下文 RAG</div><p class="text-zinc-500 text-xs">跨 GitHub/日历/IM/笔记四大数据源搜集上下文，生成的草稿包含用户真实的工作内容，而非通用模板填充。</p></div>
+          <div class="p-3 rounded-lg bg-emerald-500/5"><div class="text-zinc-200 text-sm font-medium mb-1">端到端闭环交付</div><p class="text-zinc-500 text-xs">从触发到交付的完整闭环，草稿自动写入 Notion/Obsidian，无需手动复制粘贴，形成文档工作流的自动化闭环。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 7: MVP 成功指标 ====== -->
+    <section class="mb-20" id="metrics">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">MVP 成功指标</h2>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="glass-card rounded-2xl p-6"><div class="flex items-center justify-between mb-4"><span class="text-sm text-zinc-400">草稿完成度</span><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">目标</span></div><div class="flex items-end gap-2 mb-4"><span class="text-3xl font-bold text-emerald-400">&ge;30</span><span class="text-lg text-zinc-500 mb-1">%</span></div><div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden mb-3"><div class="h-full bg-emerald-500 rounded-full progress-bar" style="width: 30%"></div></div><p class="text-xs text-zinc-500 leading-relaxed">测量方法：统计 Agent 生成的文本 token 数占最终交付文档 token 数的比例。"完成"定义为：章节结构完整、关键数据已填充、仅剩细节需要用户补充。排除[待补充]标记位置的内容。</p></div>
+
+        <div class="glass-card rounded-2xl p-6"><div class="flex items-center justify-between mb-4"><span class="text-sm text-zinc-400">用户修改率</span><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">目标</span></div><div class="flex items-end gap-2 mb-4"><span class="text-3xl font-bold text-emerald-400">&lt;50</span><span class="text-lg text-zinc-500 mb-1">%</span></div><div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden mb-3"><div class="h-full bg-emerald-500 rounded-full progress-bar" style="width: 50%"></div></div><p class="text-xs text-zinc-500 leading-relaxed">计算方法：修改率 = 用户修改的文本段落数 / 草稿总段落数。修改包括：内容重写、数据更正、删除冗余段落。不包括：格式调整、[待补充]位置填充。修改率越低说明草稿质量越高。</p></div>
+
+        <div class="glass-card rounded-2xl p-6"><div class="flex items-center justify-between mb-4"><span class="text-sm text-zinc-400">端到端延迟</span><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">目标</span></div><div class="flex items-end gap-2 mb-4"><span class="text-3xl font-bold text-emerald-400">&lt;30</span><span class="text-lg text-zinc-500 mb-1">秒</span></div><div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden mb-3"><div class="h-full bg-emerald-500 rounded-full progress-bar" style="width: 30%"></div></div><p class="text-xs text-zinc-500 leading-relaxed">各阶段时间分配：触发确认 &lt;1s，上下文搜集 5-10s（并行拉取），模板选择 &lt;1s，LLM 生成 10-15s（流式输出），交付写入 2-3s。SSE 首字节延迟 &lt;3s，用户可在生成过程中开始审阅。</p></div>
+
+        <div class="glass-card rounded-2xl p-6"><div class="flex items-center justify-between mb-4"><span class="text-sm text-zinc-400">数据源覆盖率</span><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">目标</span></div><div class="flex items-end gap-2 mb-4"><span class="text-3xl font-bold text-emerald-400">&ge;3</span><span class="text-lg text-zinc-500 mb-1">个</span></div><div class="flex gap-2 mt-1 mb-4"><div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">GH</div><div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">Cal</div><div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xs font-bold">IM</div><div class="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-600 text-xs font-bold">Note</div></div><p class="text-xs text-zinc-500 leading-relaxed">优先级排序：1) GitHub（开发者核心数据源）2) 日历（会议/日程信息）3) IM（沟通上下文）4) 笔记（个人知识库）。MVP 至少接入前 3 个，笔记适配器作为增强项。</p></div>
+
+        <div class="glass-card rounded-2xl p-6 sm:col-span-2"><div class="flex items-center justify-between mb-4"><span class="text-sm text-zinc-400">用户满意度</span><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">目标</span></div><div class="flex items-center gap-6"><div class="flex items-end gap-2"><span class="text-3xl font-bold text-emerald-400">&ge;4.0</span><span class="text-lg text-zinc-500 mb-1">/ 5.0</span></div><div class="flex-1"><div class="flex items-center gap-1 mb-2"><svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><svg class="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><svg class="w-5 h-5 text-zinc-700" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg></div><div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full progress-bar" style="width: 80%"></div></div></div></div><p class="text-xs text-zinc-500 mt-3 leading-relaxed">评分维度：1) 草稿内容相关性（是否包含真实工作内容）2) 草稿结构完整性（章节是否齐全）3) 交互体验流畅度（触发到交付的流程是否顺畅）4) 时间节省感知（相比手动撰写的效率提升）。收集方式：每次交付后弹出 1-5 分评分弹窗 + 可选文字反馈。</p></div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 8: MVP 时间线与迭代路线 ====== -->
+    <section class="mb-20" id="timeline">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">MVP 时间线与迭代路线</h2>
+      </div>
+
+      <div class="space-y-0">
+        <div class="relative pl-12 pb-8"><div class="timeline-line"></div><div class="absolute left-0 top-0 w-10 h-10 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center z-10"><span class="text-emerald-400 text-xs font-bold">0</span></div><div class="glass-card rounded-2xl p-6"><div class="flex items-center gap-3 mb-4"><h3 class="text-base font-semibold text-zinc-100">Phase 0: 基础设施</h3><span class="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">W1 - W2</span></div><div class="grid sm:grid-cols-2 gap-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>项目脚手架搭建（Go 后端 + 前端框架选型）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>数据库 Schema 设计与迁移工具</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>SSE 基础设施（服务端推送 + 前端消费）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>OAuth2 认证框架（GitHub / Google / Notion）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>CI/CD 流水线与 Docker 镜像构建</div></div></div></div>
+
+        <div class="relative pl-12 pb-8"><div class="timeline-line"></div><div class="absolute left-0 top-0 w-10 h-10 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center z-10"><span class="text-emerald-400 text-xs font-bold">1</span></div><div class="glass-card rounded-2xl p-6"><div class="flex items-center gap-3 mb-4"><h3 class="text-base font-semibold text-zinc-100">Phase 1: 触发引擎</h3><span class="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">W3 - W4</span></div><div class="grid sm:grid-cols-2 gap-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>关键词匹配引擎（正则 + 模式映射）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>DDL 检测定时任务（轮询 + 提前量配置）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Todoist Webhook 集成</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>触发事件队列与分发机制</div></div></div></div>
+
+        <div class="relative pl-12 pb-8"><div class="timeline-line"></div><div class="absolute left-0 top-0 w-10 h-10 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center z-10"><span class="text-emerald-400 text-xs font-bold">2</span></div><div class="glass-card rounded-2xl p-6"><div class="flex items-center gap-3 mb-4"><h3 class="text-base font-semibold text-zinc-100">Phase 2: 上下文搜集</h3><span class="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">W4 - W7</span></div><div class="grid sm:grid-cols-2 gap-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>GitHub 适配器（commits/PRs/issues/reviews）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Google Calendar / Outlook 适配器</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>飞书 / Slack IM 适配器</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>向量化索引与语义检索管道</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>多源数据聚合与去重</div></div></div></div>
+
+        <div class="relative pl-12 pb-8"><div class="timeline-line"></div><div class="absolute left-0 top-0 w-10 h-10 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center z-10"><span class="text-emerald-400 text-xs font-bold">3</span></div><div class="glass-card rounded-2xl p-6"><div class="flex items-center gap-3 mb-4"><h3 class="text-base font-semibold text-zinc-100">Phase 3: 草稿生成</h3><span class="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">W7 - W9</span></div><div class="grid sm:grid-cols-2 gap-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>模板引擎（YAML + Markdown + 变量插值）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Eino DAG 编排（5 阶段流水线）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>LLM 集成（GPT-4o / Claude 3.5 Sonnet）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>[待补充] 标记系统</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>草稿质量评估与自动重试</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Prompt 模板管理与版本控制</div></div></div></div>
+
+        <div class="relative pl-12 pb-8"><div class="absolute left-0 top-0 w-10 h-10 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center z-10"><span class="text-emerald-400 text-xs font-bold">4</span></div><div class="glass-card rounded-2xl p-6"><div class="flex items-center gap-3 mb-4"><h3 class="text-base font-semibold text-zinc-100">Phase 4: 前端与交付</h3><span class="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">W10 - W13</span></div><div class="grid sm:grid-cols-2 gap-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>前端草稿编辑器（实时预览 + [待补充]高亮）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Notion API 交付集成</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Obsidian 文件交付集成</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>状态监控面板（SSE 实时更新）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>端到端集成测试与用户验收</div></div></div></div>
+      </div>
+
+      <!-- 时间线图 -->
+      <div class="glass-card rounded-2xl p-6 mt-8">
+        <h3 class="text-sm font-medium text-zinc-400 mb-4 text-center">MVP 开发周期概览 (13 Weeks)</h3>
+        <div class="space-y-2">
+          <div class="flex items-center gap-3"><span class="text-xs text-zinc-500 w-16 text-right">Phase 0</span><div class="flex-1 h-6 bg-zinc-800 rounded-full overflow-hidden relative"><div class="h-full bg-emerald-500/30 rounded-full" style="width: 15.4%"></div><span class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">W1-W2</span></div></div>
+          <div class="flex items-center gap-3"><span class="text-xs text-zinc-500 w-16 text-right">Phase 1</span><div class="flex-1 h-6 bg-zinc-800 rounded-full overflow-hidden relative"><div class="h-full bg-emerald-500/30 rounded-full" style="width: 15.4%; margin-left: 15.4%"></div><span class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">W3-W4</span></div></div>
+          <div class="flex items-center gap-3"><span class="text-xs text-zinc-500 w-16 text-right">Phase 2</span><div class="flex-1 h-6 bg-zinc-800 rounded-full overflow-hidden relative"><div class="h-full bg-emerald-500/30 rounded-full" style="width: 30.8%; margin-left: 30.8%"></div><span class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">W4-W7</span></div></div>
+          <div class="flex items-center gap-3"><span class="text-xs text-zinc-500 w-16 text-right">Phase 3</span><div class="flex-1 h-6 bg-zinc-800 rounded-full overflow-hidden relative"><div class="h-full bg-emerald-500/30 rounded-full" style="width: 23%; margin-left: 53.8%"></div><span class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">W7-W9</span></div></div>
+          <div class="flex items-center gap-3"><span class="text-xs text-zinc-500 w-16 text-right">Phase 4</span><div class="flex-1 h-6 bg-zinc-800 rounded-full overflow-hidden relative"><div class="h-full bg-emerald-500/30 rounded-full" style="width: 30.8%; margin-left: 69.2%"></div><span class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">W10-W13</span></div></div>
+        </div>
+      </div>
+
+      <!-- V1.5 和 V2.0 -->
+      <div class="grid md:grid-cols-2 gap-6 mt-6">
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/50"><div class="flex items-center gap-2 mb-4"><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-medium">V1.5</span><h3 class="text-base font-semibold text-zinc-200">增强迭代</h3></div><div class="space-y-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>自定义 Prompt 模板编辑器</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>移动端推送通知（APNs/FCM）</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>Obsidian 笔记适配器增强</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>草稿版本对比与回滚</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/50"></span>用户反馈驱动的模板优化</div></div></div>
+        <div class="glass-card rounded-2xl p-6 border-l-4 border-l-emerald-500/30"><div class="flex items-center gap-2 mb-4"><span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-medium">V2.0</span><h3 class="text-base font-semibold text-zinc-200">规模化版本</h3></div><div class="space-y-2"><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/30"></span>多用户协作与权限管理</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/30"></span>数据分析与报表仪表盘</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/30"></span>语音唤醒与流式麦克风</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/30"></span>插件市场与第三方集成</div><div class="flex items-center gap-2 text-sm text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400/30"></span>企业级部署与 SSO 集成</div></div></div>
+      </div>
+    </section>
+
+    <div class="section-divider mb-20"></div>
+
+    <!-- ====== Section 9: 技术架构概览 ====== -->
+    <section class="mb-16" id="architecture">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text">技术架构概览</h2>
+      </div>
+
+      <!-- 后端架构分层图 -->
+      <div class="glass-card rounded-2xl p-6 mb-6">
+        <h3 class="text-sm font-medium text-zinc-400 mb-5 text-center">后端架构分层</h3>
+        <div class="space-y-3 max-w-3xl mx-auto">
+          <div class="arch-layer p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center"><div class="text-emerald-400 text-sm font-semibold mb-1">事件触发层</div><div class="text-zinc-500 text-xs">关键词匹配 / DDL 检测 / Webhook 监听 / 文件变更监听</div></div>
+          <div class="flex justify-center"><svg class="w-5 h-5 text-emerald-500/40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></div>
+          <div class="arch-layer p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center"><div class="text-emerald-400 text-sm font-semibold mb-1">任务队列</div><div class="text-zinc-500 text-xs">Asynq / Redis Queue / 任务优先级调度 / 重试与死信队列</div></div>
+          <div class="flex justify-center"><svg class="w-5 h-5 text-emerald-500/40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></div>
+          <div class="arch-layer p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center"><div class="text-emerald-400 text-sm font-semibold mb-1">数据聚合层</div><div class="text-zinc-500 text-xs">GitHub API / Calendar API / IM API / Obsidian FS / 向量检索</div></div>
+          <div class="flex justify-center"><svg class="w-5 h-5 text-emerald-500/40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></div>
+          <div class="arch-layer p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center"><div class="text-emerald-400 text-sm font-semibold mb-1">LLM 编排引擎</div><div class="text-zinc-500 text-xs">Eino DAG / 模板引擎 / RAG 注入 / [待补充] 标记 / 流式输出</div></div>
+          <div class="flex justify-center"><svg class="w-5 h-5 text-emerald-500/40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></div>
+          <div class="arch-layer p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-center"><div class="text-emerald-400 text-sm font-semibold mb-1">文档交付层</div><div class="text-zinc-500 text-xs">Notion API / Obsidian FS Write / SSE 推送 / 桌面通知</div></div>
+        </div>
+      </div>
+
+      <!-- 前端 + 数据 + 部署 -->
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-4"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg><h3 class="text-base font-semibold text-zinc-200">前端方案</h3></div>
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg bg-zinc-800/50 border border-emerald-500/10"><div class="text-emerald-400 text-xs font-medium mb-1">方案一: Tauri + Lobe UI</div><p class="text-zinc-500 text-xs">Rust 后端 + React 前端，原生桌面体验，Lobe UI 提供聊天式交互组件。优势：轻量、性能好、原生系统集成度高。适合桌面端优先策略。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-400 text-xs font-medium mb-1">方案二: Flutter</div><p class="text-zinc-500 text-xs">跨平台框架，一套代码覆盖桌面+移动端。优势：移动端扩展成本低。劣势：桌面端原生体验不如 Tauri，包体积较大。</p></div>
+            <div class="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10"><p class="text-emerald-400 text-xs">MVP 推荐：方案一（Tauri + Lobe UI），桌面端优先验证核心价值。</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-4"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg><h3 class="text-base font-semibold text-zinc-200">数据存储</h3></div>
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-300 text-xs font-medium mb-1">向量数据库</div><p class="text-zinc-500 text-xs">PostgreSQL + pgvector，存储用户上下文的向量化表示，支持语义检索和相似度匹配，用于 RAG 上下文注入。与业务数据同库管理，减少运维复杂度。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-300 text-xs font-medium mb-1">关系型数据库</div><p class="text-zinc-500 text-xs">PostgreSQL，存储用户配置、触发规则、任务状态、草稿元数据等结构化数据，通过 GORM 操作。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-300 text-xs font-medium mb-1">文件系统</div><p class="text-zinc-500 text-xs">本地文件系统，存储 Obsidian vault 的 Markdown 文件、模板文件、LLM 生成的草稿缓存。</p></div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6">
+          <div class="flex items-center gap-2 mb-4"><svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg><h3 class="text-base font-semibold text-zinc-200">部署方案</h3></div>
+          <div class="space-y-3">
+            <div class="p-3 rounded-lg bg-zinc-800/50 border border-emerald-500/10"><div class="text-emerald-400 text-xs font-medium mb-1">MVP: Docker 单机部署</div><p class="text-zinc-500 text-xs">使用 Docker Compose 编排所有服务（API Server / Worker / PostgreSQL + pgvector / Redis），单机运行，适合个人用户和早期验证。</p></div>
+            <div class="p-3 rounded-lg bg-zinc-800/50"><div class="text-zinc-400 text-xs font-medium mb-1">V2.0: K8s 集群部署</div><p class="text-zinc-500 text-xs">迁移到 Kubernetes 集群，支持水平扩展、自动伸缩、滚动更新。引入 Ingress + Service Mesh，支持多租户隔离和企业级部署。</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-zinc-800 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <p class="text-zinc-500 text-sm">Async Starter Agent MVP 定义文档 &copy; 2026</p>
+    </div>
+  </footer>
+
+</body>
+</html>
