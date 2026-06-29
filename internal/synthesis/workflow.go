@@ -123,6 +123,10 @@ func (w *draftWorkflow) generate(ctx context.Context, runID, userID, taskType st
 
 func wfRetrieveNode(rag *RAG) func(ctx context.Context, s workflowState) (workflowState, error) {
 	return func(ctx context.Context, s workflowState) (workflowState, error) {
+		writer := writerFromCtx(ctx)
+		if writer != nil {
+			_ = writer.WriteProgress("retrieve", "running")
+		}
 		items, err := rag.Retrieve(ctx, s.TaskType, 20)
 		if err != nil {
 			return s, fmt.Errorf("retrieve: %w", err)
@@ -131,12 +135,19 @@ func wfRetrieveNode(rag *RAG) func(ctx context.Context, s workflowState) (workfl
 			s.Retrieved = append(s.Retrieved, scoredItemToContextItem(it))
 		}
 		s.Completeness = 0.3
+		if writer != nil {
+			_ = writer.WriteProgress("retrieve", "done")
+		}
 		return s, nil
 	}
 }
 
 func wfTemplateNode(templateDir string) func(ctx context.Context, s workflowState) (workflowState, error) {
 	return func(ctx context.Context, s workflowState) (workflowState, error) {
+		writer := writerFromCtx(ctx)
+		if writer != nil {
+			_ = writer.WriteProgress("template", "running")
+		}
 		tplRelPath := SelectByTaskType(s.TaskType)
 		tplPath := tplRelPath
 		if templateDir != "" {
@@ -156,12 +167,19 @@ func wfTemplateNode(templateDir string) func(ctx context.Context, s workflowStat
 			return s, fmt.Errorf("template render: %w", err)
 		}
 		s.Completeness = 0.5
+		if writer != nil {
+			_ = writer.WriteProgress("template", "done")
+		}
 		return s, nil
 	}
 }
 
 func wfLLMNode(llm LLMClient, temperature float32, maxTokens int) func(ctx context.Context, s workflowState) (workflowState, error) {
 	return func(ctx context.Context, s workflowState) (workflowState, error) {
+		writer := writerFromCtx(ctx)
+		if writer != nil {
+			_ = writer.WriteProgress("llm", "running")
+		}
 		pb := PromptBuilder{}
 		msgs := pb.Build(s.TaskType, s.Template, s.Retrieved)
 		req := ChatRequest{
@@ -180,11 +198,17 @@ func wfLLMNode(llm LLMClient, temperature float32, maxTokens int) func(ctx conte
 				return s, fmt.Errorf("llm stream: %w", c.Err)
 			}
 			s.Draft += c.Content
+			if writer != nil && c.Content != "" {
+				_ = writer.WriteDelta(c.Content)
+			}
 			if c.Done {
 				break
 			}
 		}
 		s.Completeness = Completeness(s.Draft)
+		if writer != nil {
+			_ = writer.WriteProgress("llm", "done")
+		}
 		return s, nil
 	}
 }
