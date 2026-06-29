@@ -49,9 +49,8 @@ func (a *ObsidianAdapter) Name() string { return "obsidian" }
 
 // Fetch walks the vault and returns .md notes whose ModTime is not before
 // `since`. It respects MaxDepth (prunes over-deep directories) and MaxFiles
-// (stops once the limit is reached). The userID parameter is accepted to
-// satisfy the sourceAdapter contract but is not stored on ContextItem
-// (adding UserID is T014 scope).
+// (stops once the limit is reached). The userID parameter is stored on each
+// ContextItem for incremental sync and persistence (FR-B06).
 //
 // Depth semantics: depth = number of path separators in the path relative to
 // VaultPath. The root itself is depth 0. A file is included when its depth <=
@@ -111,6 +110,7 @@ func (a *ObsidianAdapter) Fetch(ctx context.Context, userID string, since time.T
 		title := strings.TrimSuffix(base, filepath.Ext(base))
 		items = append(items, harvesting.ContextItem{
 			ID:         "obsidian:note:" + path,
+			UserID:     userID,
 			Source:     "obsidian",
 			Type:       "note",
 			Title:      title,

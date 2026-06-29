@@ -65,3 +65,13 @@ func defaultRules() []Rule {
 
 // DefaultMatcherRules is the exported alias used by tests / wire
 func DefaultMatcherRules() []Rule { return defaultRules() }
+
+// Rules 返回当前已注册的规则列表（只读快照）。
+// 用于 GET /api/v1/keywords 端点暴露给前端展示。
+func (m *Matcher) Rules() []Rule {
+	out := make([]Rule, len(m.rules))
+	for i, r := range m.rules {
+		out[i] = Rule{Pattern: r.raw, TaskType: r.taskType}
+	}
+	return out
+}

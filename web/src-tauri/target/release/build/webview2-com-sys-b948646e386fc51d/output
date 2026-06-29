@@ -1,0 +1,2 @@
+cargo:rustc-link-search=native=K:\go_projects\AsyncStarterAgent\web\src-tauri\target\release\build\webview2-com-sys-b948646e386fc51d\out\x64
+cargo:rustc-link-lib=advapi32

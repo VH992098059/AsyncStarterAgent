@@ -1,9 +1,19 @@
 package harvesting
 
-import "time"
+import (
+	"context"
+	"time"
+)
+
+// NoiseClassifier determines whether a ContextItem is noise (FR-B05).
+// Implementations may use rule-based logic, LLM calls, or other strategies.
+type NoiseClassifier interface {
+	IsNoise(ctx context.Context, item ContextItem) (bool, string, error)
+}
 
 type ContextItem struct {
 	ID         string            `json:"id"`
+	UserID     string            `json:"user_id"`     // FR-B06: 关联用户，增量同步 + 入库必需
 	Source     string            `json:"source"`     // github / calendar / im / note
 	Type       string            `json:"type"`       // commit / pr / review / meeting / message / note
 	Title      string            `json:"title"`

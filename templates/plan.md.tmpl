@@ -1,0 +1,17 @@
+# {{.Title}}
+
+> 规划时间：{{date "2006-01-02"}}
+
+## 目标
+
+{{range .Items}}- {{.Title}}
+{{end}}
+
+## 行动项
+
+{{range .Items}}
+### {{.Title}}
+
+{{.Content}}
+
+{{end}}

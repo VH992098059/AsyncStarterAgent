@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 // Config 集中管理应用配置（环境变量加载）
@@ -13,10 +15,22 @@ type Config struct {
 	RedisURL             string
 	JWTSecret            string
 	TodoistWebhookSecret string
+	OpenAIKey            string
+	OpenAIModel          string
+	OpenAIBaseURL        string
+	EmbeddingAPIKey      string
+	EmbeddingModel       string
+	EmbeddingBaseURL     string
+	ObsidianVaultPath    string
+	NotionAPIKey         string
+	NotionParentPageID   string
 }
 
-// Load 从环境变量加载配置；生产环境强制要求 JWT_SECRET
+// Load 从环境变量加载配置；自动加载 .env 文件；生产环境强制要求 JWT_SECRET
 func Load() (*Config, error) {
+	// 开发环境自动加载 .env（已设置的环境变量不会被覆盖）
+	_ = godotenv.Load()
+
 	env := getEnv("APP_ENV", "development")
 	port := getEnv("APP_PORT", "8080")
 	dsn := getEnv("DATABASE_URL", "")
@@ -35,6 +49,15 @@ func Load() (*Config, error) {
 		RedisURL:             redis,
 		JWTSecret:            jwt,
 		TodoistWebhookSecret: todoistSecret,
+		OpenAIKey:            getEnv("OPENAI_API_KEY", ""),
+		OpenAIModel:          getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		OpenAIBaseURL:        getEnv("OPENAI_BASE_URL", ""),
+		EmbeddingAPIKey:      getEnv("EMBEDDING_API_KEY", ""),
+		EmbeddingModel:       getEnv("EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingBaseURL:     getEnv("EMBEDDING_BASE_URL", ""),
+		ObsidianVaultPath:    getEnv("OBSIDIAN_VAULT_PATH", ""),
+		NotionAPIKey:         getEnv("NOTION_API_KEY", ""),
+		NotionParentPageID:   getEnv("NOTION_PARENT_PAGE_ID", ""),
 	}, nil
 }
 

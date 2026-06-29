@@ -3,10 +3,10 @@ package handler
 import (
 	"net/http"
 
+	"github.com/asyncstarter/agent/internal/auth"
 	"github.com/asyncstarter/agent/internal/trigger"
 	"github.com/asyncstarter/agent/pkg/httpx"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type TriggerHandler struct {
@@ -14,8 +14,9 @@ type TriggerHandler struct {
 }
 
 type triggerRequest struct {
-	UserID string `json:"user_id"`
-	Text   string `json:"text"`
+	// user_id 不再从 body 读取——由 auth.Middleware 从 JWT 注入 gin.Context。
+	// 此处仅保留 text（FR-A04 手动触发）。
+	Text string `json:"text" binding:"required"`
 }
 
 type triggerResponse struct {
@@ -28,9 +29,9 @@ func (h *TriggerHandler) ManualTrigger(c *gin.Context) {
 		httpx.Fail(c, http.StatusBadRequest, 4001, "invalid body")
 		return
 	}
-	uid, err := uuid.Parse(req.UserID)
-	if err != nil {
-		httpx.Fail(c, http.StatusBadRequest, 4001, "invalid user_id")
+	uid, ok := auth.MustUserID(c)
+	if !ok {
+		httpx.Fail(c, http.StatusUnauthorized, 4001, "no user in context")
 		return
 	}
 	runID, err := h.Svc.ProcessKeyword(c.Request.Context(), uid, req.Text)

@@ -1,0 +1,17 @@
+# {{.Title}}
+
+> 总结时间：{{date "2006-01-02"}}
+
+## 核心结论
+
+{{range .Items}}- {{.Title}}
+{{end}}
+
+## 详细说明
+
+{{range .Items}}
+### {{.Title}}
+
+{{.Content}}
+
+{{end}}

@@ -125,5 +125,9 @@ func (a *GitHubAdapter) Fetch(ctx context.Context, userID string, since time.Tim
 	if err != nil {
 		return nil, err
 	}
-	return append(commits, prs...), nil
+	all := append(commits, prs...)
+	for i := range all {
+		all[i].UserID = userID
+	}
+	return all, nil
 }

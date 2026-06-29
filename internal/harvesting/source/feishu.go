@@ -35,6 +35,7 @@ func (a *FeishuAdapter) Fetch(ctx context.Context, userID string, since time.Tim
 			return nil, fmt.Errorf("feishu adapter fetch: %w", err)
 		}
 		for i := range items {
+			items[i].UserID = userID
 			items[i].Source = a.Source
 			if items[i].Type == "" {
 				items[i].Type = "message"

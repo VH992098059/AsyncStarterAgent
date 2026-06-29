@@ -29,6 +29,7 @@ func (a *CalendarAdapter) Fetch(ctx context.Context, userID string, since time.T
 		return nil, fmt.Errorf("calendar adapter fetch: %w", err)
 	}
 	for i := range items {
+		items[i].UserID = userID
 		items[i].Source = a.Source
 		if items[i].Type == "" {
 			items[i].Type = "meeting"

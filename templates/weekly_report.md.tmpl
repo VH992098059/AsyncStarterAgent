@@ -1,0 +1,18 @@
+# {{.Title}}
+
+> 生成时间：{{date "2006-01-02"}}
+
+## 本周要点
+
+{{range .Items}}- **{{.Title}}** ({{.Source}}){{end}}
+
+## 详细记录
+
+{{range .Items}}
+### {{.Title}}
+
+{{.Content}}
+
+来源：{{.URL}}
+
+{{end}}
