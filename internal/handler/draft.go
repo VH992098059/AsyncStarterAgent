@@ -20,33 +20,31 @@ func (h *DraftStreamHandler) Stream(c *gin.Context) {
 	runID := c.Param("id")
 	ctx := c.Request.Context()
 
+	a2ui, err := synthesis.NewA2UIWriter(c.Writer)
+	if err != nil {
+		httpx.Fail(c, http.StatusInternalServerError, 5001, "streaming not supported")
+		return
+	}
+
 	exists, err := h.Svc.DraftExists(ctx, runID)
 	if err != nil {
-		httpx.Fail(c, http.StatusInternalServerError, 5001, "check draft: "+err.Error())
+		_ = a2ui.WriteError("check draft: " + err.Error())
 		return
 	}
 
 	if !exists {
 		var userID, taskType string
-		err = h.Svc.QueryRunInfo(ctx, runID, &userID, &taskType)
-		if err != nil {
-			httpx.Fail(c, http.StatusNotFound, 4004, "run not found: "+err.Error())
+		if err = h.Svc.QueryRunInfo(ctx, runID, &userID, &taskType); err != nil {
+			_ = a2ui.WriteError("run not found: " + err.Error())
 			return
 		}
-		result, err := h.Svc.GenerateDraft(ctx, runID, userID, taskType)
-		if err != nil {
-			httpx.Fail(c, http.StatusInternalServerError, 5001, err.Error())
-			return
+		if err = h.Svc.GenerateDraftStream(ctx, runID, userID, taskType, a2ui); err != nil {
+			_ = a2ui.WriteError(err.Error())
 		}
-		_ = result
-	}
-
-	sse, err := synthesis.NewSSEWriter(c.Writer)
-	if err != nil {
-		httpx.Fail(c, http.StatusInternalServerError, 5001, "sse unsupported")
 		return
 	}
-	if err := h.Svc.StreamDraft(ctx, runID, sse); err != nil {
-		_ = sse.Write("error", map[string]interface{}{"message": err.Error()})
+
+	if err := h.Svc.StreamDraft(ctx, runID, a2ui); err != nil {
+		_ = a2ui.WriteError(err.Error())
 	}
 }
