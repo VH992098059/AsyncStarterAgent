@@ -104,7 +104,25 @@ func (s *Service) QueryRunInfo(ctx context.Context, runID string, userID, taskTy
 	).Scan(userID, taskType)
 }
 
-func (s *Service) StreamDraft(ctx context.Context, runID string, w *SSEWriter) error {
+// streamMarkdown 将已有 markdown 分块写为 A2UI delta + complete。
+// 按 rune 切割，避免多字节字符乱码。
+func (s *Service) streamMarkdown(ctx context.Context, md string, w *A2UIWriter) error {
+	const chunkSize = 30
+	runes := []rune(md)
+	for i := 0; i < len(runes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		if err := w.WriteDelta(string(runes[i:end])); err != nil {
+			return err
+		}
+	}
+	marks := ExtractMarks(md)
+	return w.WriteComplete(marks, Completeness(md))
+}
+
+func (s *Service) StreamDraft(ctx context.Context, runID string, w *A2UIWriter) error {
 	row := s.pool.QueryRow(ctx,
 		"SELECT markdown_content FROM drafts WHERE agent_run_id = $1 LIMIT 1",
 		runID,
@@ -113,23 +131,61 @@ func (s *Service) StreamDraft(ctx context.Context, runID string, w *SSEWriter) e
 	if err := row.Scan(&md); err != nil {
 		return fmt.Errorf("draft not found: %w", err)
 	}
+	return s.streamMarkdown(ctx, md, w)
+}
 
-	const chunkSize = 30
-	for i := 0; i < len(md); i += chunkSize {
-		end := i + chunkSize
-		if end > len(md) {
-			end = len(md)
-		}
-		if err := w.Write("delta", map[string]interface{}{"text": md[i:end]}); err != nil {
-			return err
+// GenerateDraftStream 执行完整 workflow 并将 LLM token 实时写入 w，
+// workflow 结束后将结果存库并写 complete 事件。
+func (s *Service) GenerateDraftStream(ctx context.Context, runID, userID, taskType string, w *A2UIWriter) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user id: %w", err)
+	}
+
+	llm, err := s.factory.GetLLM(ctx, uid)
+	if err != nil {
+		return err
+	}
+	embedder, err := s.factory.GetEmbedder(ctx, uid)
+	if err != nil {
+		return err
+	}
+
+	rag := NewRAG(*embedder, s.vecStore)
+	temp := s.factory.GetLLMTemperature(ctx, uid)
+	maxTokens := s.factory.GetLLMMaxTokens(ctx, uid)
+
+	wfCfg := workflowConfig{
+		TemplateDir: s.templateDir,
+		Temperature: temp,
+		MaxTokens:   maxTokens,
+	}
+	wf, err := newDraftWorkflow(ctx, rag, llm, wfCfg)
+	if err != nil {
+		return fmt.Errorf("build workflow: %w", err)
+	}
+
+	streamCtx := WithA2UIWriter(ctx, w)
+	result, err := wf.generate(streamCtx, runID, userID, taskType)
+	if err != nil {
+		return fmt.Errorf("generate draft: %w", err)
+	}
+
+	if s.pool != nil {
+		marksJSON, _ := marshalMarks(result.Marks)
+		_, saveErr := s.pool.Exec(ctx,
+			`INSERT INTO drafts (agent_run_id, title, markdown_content, completeness, marks, status)
+             VALUES ($1, $2, $3, $4, $5, 'draft')
+             ON CONFLICT (agent_run_id) DO UPDATE SET markdown_content = $3, completeness = $4, marks = $5, updated_at = NOW()`,
+			runID, taskType, result.Draft, result.Completeness, marksJSON,
+		)
+		if saveErr != nil {
+			_ = w.WriteComplete(result.Marks, result.Completeness)
+			return fmt.Errorf("save draft: %w", saveErr)
 		}
 	}
 
-	marks := ExtractMarks(md)
-	return w.Write("complete", map[string]interface{}{
-		"marks":        marks,
-		"completeness": Completeness(md),
-	})
+	return w.WriteComplete(result.Marks, result.Completeness)
 }
 
 func (s *Service) TestLLM(ctx context.Context, userID string) error {
