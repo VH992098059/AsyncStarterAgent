@@ -2,12 +2,12 @@ package feishu
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // memTokenStore 是内存版 TokenStore，用于单测
@@ -40,7 +40,8 @@ func (m *memTokenStore) Get(_ context.Context, userID uuid.UUID) (*TokenRecord, 
 	}
 	rec, ok := m.data[userID]
 	if !ok {
-		return nil, errors.New("not found")
+		// 与 pgTokenStore.Get 的 not-found 行为对齐，便于上层用 errors.Is(err, pgx.ErrNoRows) 判断
+		return nil, pgx.ErrNoRows
 	}
 	return rec, nil
 }
