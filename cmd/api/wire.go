@@ -8,6 +8,7 @@ import (
 	"github.com/asyncstarter/agent/internal/auth"
 	"github.com/asyncstarter/agent/internal/config"
 	"github.com/asyncstarter/agent/internal/delivery"
+	"github.com/asyncstarter/agent/internal/feishu"
 	"github.com/asyncstarter/agent/internal/queue"
 	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/asyncstarter/agent/internal/server"
@@ -74,7 +75,27 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	go trigger.RunDDLScheduler(ctx, pool, trigger.NewDDLDetector(), ddlH)
 
 	settingsRepo := settings.NewRepo(pool)
-	settingsFactory := settings.NewFactory(pool, settingsRepo, cfg)
+
+	// 决策 #7: 飞书 OAuth + token 工厂
+	// 注意：必须声明为接口类型 settings.FeishuClientGetter（而非 *feishu.ClientFactory），
+	// 这样当飞书未启用时 feishuGetter 保持真正的 nil interface，
+	// 否则会触发 Go nil-interface gotcha（nil typed pointer 包在 interface 里 != nil），
+	// 导致 settings.Factory.GetFeishuClient 中的 f.feishuCli == nil 判断失效而 panic。
+	var feishuGetter settings.FeishuClientGetter
+	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
+		tokenStore := feishu.NewTokenStore(pool, cfg.DBEncryptionKey)
+		authClient := feishu.NewAuthClient(feishu.OAuthConfig{
+			AppID:       cfg.FeishuAppID,
+			AppSecret:   cfg.FeishuAppSecret,
+			RedirectURL: cfg.FeishuRedirectURL,
+		})
+		feishuGetter = feishu.NewClientFactory(cfg.FeishuAppID, cfg.FeishuAppSecret, tokenStore, authClient)
+		log.Println("[feishu] client factory initialized")
+	} else {
+		log.Println("[feishu] disabled (FEISHU_APP_ID not set)")
+	}
+
+	settingsFactory := settings.NewFactory(pool, settingsRepo, cfg, feishuGetter)
 
 	synSvc := synthesis.NewService(pool, settingsFactory, "")
 	log.Println("[synthesis] service initialized with per-user config factory")

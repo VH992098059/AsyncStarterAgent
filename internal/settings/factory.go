@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
 
 type cachedLLM struct {
@@ -49,9 +50,16 @@ type Factory struct {
 	embCache  map[uuid.UUID]cachedEmbedder
 	notionMap map[uuid.UUID]cachedNotion
 	obsMap    map[uuid.UUID]cachedObsidian
+	feishuCli FeishuClientGetter // 决策 #7: 飞书 per-user client 工厂（接口，避免循环依赖）
 }
 
-func NewFactory(pool *pgxpool.Pool, repo *Repo, defaults *config.Config) *Factory {
+// FeishuClientGetter 由 feishu 包实现，settings 包通过接口依赖，避免循环依赖
+type FeishuClientGetter interface {
+	GetClient(ctx context.Context, userID uuid.UUID) (*lark.Client, string, error)
+	IsAuthorized(ctx context.Context, userID uuid.UUID) bool
+}
+
+func NewFactory(pool *pgxpool.Pool, repo *Repo, defaults *config.Config, feishuCli FeishuClientGetter) *Factory {
 	return &Factory{
 		pool:      pool,
 		repo:      repo,
@@ -60,6 +68,7 @@ func NewFactory(pool *pgxpool.Pool, repo *Repo, defaults *config.Config) *Factor
 		embCache:  make(map[uuid.UUID]cachedEmbedder),
 		notionMap: make(map[uuid.UUID]cachedNotion),
 		obsMap:    make(map[uuid.UUID]cachedObsidian),
+		feishuCli: feishuCli,
 	}
 }
 
@@ -242,4 +251,21 @@ func (f *Factory) GetObsidianAdapter(_ context.Context, userID uuid.UUID) (*deli
 	f.mu.Unlock()
 
 	return adapter, nil
+}
+
+// GetFeishuClient 返回 per-user 的飞书 lark.Client + user_access_token
+// 决策 #7: 所有飞书 API 调用必须走此方法，确保以用户身份调用
+func (f *Factory) GetFeishuClient(ctx context.Context, userID uuid.UUID) (*lark.Client, string, error) {
+	if f.feishuCli == nil {
+		return nil, "", fmt.Errorf("飞书集成未启用（未配置 FEISHU_APP_ID）")
+	}
+	return f.feishuCli.GetClient(ctx, userID)
+}
+
+// IsFeishuAuthorized 检查用户是否已授权飞书
+func (f *Factory) IsFeishuAuthorized(ctx context.Context, userID uuid.UUID) bool {
+	if f.feishuCli == nil {
+		return false
+	}
+	return f.feishuCli.IsAuthorized(ctx, userID)
 }
