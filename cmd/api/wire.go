@@ -34,6 +34,7 @@ type Deps struct {
 	Matcher         *trigger.Matcher
 	SettingsRepo    *settings.Repo
 	SettingsFactory *settings.Factory
+	FeishuFactory   *feishu.ClientFactory
 }
 
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
@@ -77,11 +78,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	settingsRepo := settings.NewRepo(pool)
 
 	// 决策 #7: 飞书 OAuth + token 工厂
-	// 注意：必须声明为接口类型 settings.FeishuClientGetter（而非 *feishu.ClientFactory），
-	// 这样当飞书未启用时 feishuGetter 保持真正的 nil interface，
-	// 否则会触发 Go nil-interface gotcha（nil typed pointer 包在 interface 里 != nil），
-	// 导致 settings.Factory.GetFeishuClient 中的 f.feishuCli == nil 判断失效而 panic。
-	var feishuGetter settings.FeishuClientGetter
+	var feishuFactory *feishu.ClientFactory
 	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
 		tokenStore := feishu.NewTokenStore(pool, cfg.DBEncryptionKey)
 		authClient := feishu.NewAuthClient(feishu.OAuthConfig{
@@ -89,12 +86,18 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			AppSecret:   cfg.FeishuAppSecret,
 			RedirectURL: cfg.FeishuRedirectURL,
 		})
-		feishuGetter = feishu.NewClientFactory(cfg.FeishuAppID, cfg.FeishuAppSecret, tokenStore, authClient)
+		feishuFactory = feishu.NewClientFactory(cfg.FeishuAppID, cfg.FeishuAppSecret, tokenStore, authClient)
 		log.Println("[feishu] client factory initialized")
 	} else {
 		log.Println("[feishu] disabled (FEISHU_APP_ID not set)")
 	}
 
+	// 用接口类型传入 settings.NewFactory，避免 nil *feishu.ClientFactory 包入接口后非 nil 的陷阱
+	// （Go nil-interface gotcha: nil typed pointer wrapped in interface != nil）
+	var feishuGetter settings.FeishuClientGetter
+	if feishuFactory != nil {
+		feishuGetter = feishuFactory
+	}
 	settingsFactory := settings.NewFactory(pool, settingsRepo, cfg, feishuGetter)
 
 	synSvc := synthesis.NewService(pool, settingsFactory, "")
@@ -118,6 +121,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		Matcher:         matcher,
 		SettingsRepo:    settingsRepo,
 		SettingsFactory: settingsFactory,
+		FeishuFactory:   feishuFactory,
 	}, nil
 }
 

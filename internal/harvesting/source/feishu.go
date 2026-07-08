@@ -8,15 +8,17 @@ import (
 
 	"github.com/asyncstarter/agent/internal/harvesting"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
-// FeishuProvider abstracts the Feishu/Lark message provider (FR-B03)
+// FeishuProvider 抽象飞书消息 provider（决策 #7: 以用户身份调用）
 type FeishuProvider interface {
-	ListMessages(ctx context.Context, chatID string, from, to time.Time) ([]harvesting.ContextItem, error)
+	ListMessages(ctx context.Context, userToken, chatID string, from, to time.Time) ([]harvesting.ContextItem, error)
 }
 
-// FeishuAdapter is the unified entry point, implements sourceAdapter interface
+// FeishuAdapter 是统一入口，实现 sourceAdapter 接口
+// 决策 #7: 不再持有全局 client，每次 Fetch 时从 ctx 读取 user_access_token
 type FeishuAdapter struct {
 	Provider FeishuProvider
 	Source   string   // feishu / lark
@@ -25,12 +27,17 @@ type FeishuAdapter struct {
 
 func (a *FeishuAdapter) Name() string { return a.Source }
 
-// Fetch implements sourceAdapter interface — fetches messages since the given time
+// Fetch 实现 sourceAdapter 接口
+// 决策 #7: 通过 ctx 注入 user_access_token（见 WithUserToken）
 func (a *FeishuAdapter) Fetch(ctx context.Context, userID string, since time.Time) ([]harvesting.ContextItem, error) {
+	userToken, ok := UserTokenFromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("feishu adapter: user access token not found in context")
+	}
 	to := time.Now()
 	var out []harvesting.ContextItem
 	for _, chatID := range a.ChatIDs {
-		items, err := a.Provider.ListMessages(ctx, chatID, since, to)
+		items, err := a.Provider.ListMessages(ctx, userToken, chatID, since, to)
 		if err != nil {
 			return nil, fmt.Errorf("feishu adapter fetch: %w", err)
 		}
@@ -46,34 +53,20 @@ func (a *FeishuAdapter) Fetch(ctx context.Context, userID string, since time.Tim
 	return out, nil
 }
 
-// --- Lark SDK Provider (concrete implementation) ---
+// --- Lark SDK Provider ---
 
-// LarkConfig holds configuration for the Lark SDK provider
-type LarkConfig struct {
-	AppID     string
-	AppSecret string
-}
-
-// LarkProvider implements FeishuProvider using the Lark SDK
+// LarkProvider 用 lark SDK 实现 FeishuProvider
 type LarkProvider struct {
-	client *lark.Client
+	cli *lark.Client
 }
 
-// NewLarkProvider creates a new Lark SDK provider with validation
-func NewLarkProvider(cfg LarkConfig) (*LarkProvider, error) {
-	if cfg.AppID == "" {
-		return nil, fmt.Errorf("lark provider: app id is required")
-	}
-	if cfg.AppSecret == "" {
-		return nil, fmt.Errorf("lark provider: app secret is required")
-	}
-	client := lark.NewClient(cfg.AppID, cfg.AppSecret)
-	return &LarkProvider{client: client}, nil
+// NewLarkProvider 创建 provider。cli 是共享的基础 client（由 ClientFactory 构造），
+// 实际 API 调用时通过 larkcore.WithUserAccessToken(userToken) 以用户身份调用
+func NewLarkProvider(cli *lark.Client) *LarkProvider {
+	return &LarkProvider{cli: cli}
 }
 
-// ListMessages fetches messages from a specific chat within the time range
-// Uses iterator for automatic pagination
-func (p *LarkProvider) ListMessages(ctx context.Context, chatID string, from, to time.Time) ([]harvesting.ContextItem, error) {
+func (p *LarkProvider) ListMessages(ctx context.Context, userToken, chatID string, from, to time.Time) ([]harvesting.ContextItem, error) {
 	req := larkim.NewListMessageReqBuilder().
 		ContainerIdType("chat").
 		ContainerId(chatID).
@@ -83,7 +76,8 @@ func (p *LarkProvider) ListMessages(ctx context.Context, chatID string, from, to
 		PageSize(50).
 		Build()
 
-	iter, err := p.client.Im.V1.Message.ListByIterator(ctx, req)
+	// 决策 #7: 以用户身份调用（larkcore.WithUserAccessToken 是 per-request option）
+	iter, err := p.cli.Im.V1.Message.ListByIterator(ctx, req, larkcore.WithUserAccessToken(userToken))
 	if err != nil {
 		return nil, fmt.Errorf("lark list messages: %w", err)
 	}
@@ -97,12 +91,12 @@ func (p *LarkProvider) ListMessages(ctx context.Context, chatID string, from, to
 		if !ok {
 			break
 		}
-		items = append(items, p.convertMessage(msg, chatID))
+		items = append(items, convertMessage(msg, chatID))
 	}
 	return items, nil
 }
 
-func (p *LarkProvider) convertMessage(m *larkim.Message, chatID string) harvesting.ContextItem {
+func convertMessage(m *larkim.Message, chatID string) harvesting.ContextItem {
 	id := derefStr(m.MessageId)
 	msgType := derefStr(m.MsgType)
 	content := ""
@@ -135,17 +129,20 @@ func (p *LarkProvider) convertMessage(m *larkim.Message, chatID string) harvesti
 	}
 }
 
-// NewFeishuAdapter is a convenience constructor that creates a LarkProvider + FeishuAdapter
-func NewFeishuAdapter(cfg LarkConfig, chatIDs []string) (*FeishuAdapter, error) {
-	provider, err := NewLarkProvider(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &FeishuAdapter{
-		Provider: provider,
-		Source:   "feishu",
-		ChatIDs:  chatIDs,
-	}, nil
+// UserTokenFromContext 从 ctx 读取 user_access_token（由调用方注入）
+type ctxKey struct{}
+
+var userTokenKey = ctxKey{}
+
+// WithUserToken 把飞书 user_access_token 注入 ctx
+func WithUserToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, userTokenKey, token)
+}
+
+// UserTokenFromContext 从 ctx 取出 user_access_token
+func UserTokenFromContext(ctx context.Context) (string, bool) {
+	t, ok := ctx.Value(userTokenKey).(string)
+	return t, ok
 }
 
 func derefStr(p *string) string {
@@ -154,3 +151,6 @@ func derefStr(p *string) string {
 	}
 	return *p
 }
+
+// 确保 LarkProvider 满足 FeishuProvider 接口
+var _ FeishuProvider = (*LarkProvider)(nil)

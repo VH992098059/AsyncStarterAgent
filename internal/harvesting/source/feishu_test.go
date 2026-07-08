@@ -14,7 +14,8 @@ type mockFeishu struct {
 	err      error
 }
 
-func (m *mockFeishu) ListMessages(_ context.Context, _ string, _, _ time.Time) ([]harvesting.ContextItem, error) {
+// 签名变更：新增 userToken 参数（决策 #7）
+func (m *mockFeishu) ListMessages(_ context.Context, _ string, _ string, _, _ time.Time) ([]harvesting.ContextItem, error) {
 	return m.messages, m.err
 }
 
@@ -23,7 +24,8 @@ func TestFeishuAdapter_Fetch(t *testing.T) {
 		{ID: "1", Title: "text", Type: "message", Content: "hello"},
 	}}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-1"}}
-	items, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	items, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +52,8 @@ func TestFeishuAdapter_Fetch_DefaultType(t *testing.T) {
 		{ID: "2", Title: "text", Type: ""},
 	}}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-1"}}
-	items, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	items, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +68,8 @@ func TestFeishuAdapter_Fetch_DefaultType(t *testing.T) {
 func TestFeishuAdapter_Fetch_EmptyResult(t *testing.T) {
 	mock := &mockFeishu{messages: []harvesting.ContextItem{}}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-1"}}
-	items, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	items, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +81,8 @@ func TestFeishuAdapter_Fetch_EmptyResult(t *testing.T) {
 func TestFeishuAdapter_Fetch_ProviderError(t *testing.T) {
 	mock := &mockFeishu{err: errors.New("api unavailable")}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-1"}}
-	_, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	_, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -97,7 +102,8 @@ func TestFeishuAdapter_Fetch_MultipleChats(t *testing.T) {
 		},
 	}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-a", "chat-b"}}
-	items, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	items, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +120,8 @@ func TestFeishuAdapter_Fetch_NoChatIDs(t *testing.T) {
 		{ID: "1", Title: "text", Type: "message"},
 	}}
 	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: nil}
-	items, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
+	ctx := WithUserToken(context.Background(), "fake-token")
+	items, err := a.Fetch(ctx, "user-1", time.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,17 +130,15 @@ func TestFeishuAdapter_Fetch_NoChatIDs(t *testing.T) {
 	}
 }
 
-func TestNewLarkProvider_MissingAppID(t *testing.T) {
-	_, err := NewLarkProvider(LarkConfig{AppID: "", AppSecret: "secret"})
+// 新增：缺 token 时 Fetch 应返回错误（决策 #7）
+func TestFeishuAdapter_Fetch_NoToken(t *testing.T) {
+	mock := &mockFeishu{messages: []harvesting.ContextItem{
+		{ID: "1", Title: "text", Type: "message"},
+	}}
+	a := &FeishuAdapter{Provider: mock, Source: "feishu", ChatIDs: []string{"chat-1"}}
+	_, err := a.Fetch(context.Background(), "user-1", time.Now().Add(-24*time.Hour))
 	if err == nil {
-		t.Fatal("expected error for missing app id")
-	}
-}
-
-func TestNewLarkProvider_MissingAppSecret(t *testing.T) {
-	_, err := NewLarkProvider(LarkConfig{AppID: "app-id", AppSecret: ""})
-	if err == nil {
-		t.Fatal("expected error for missing app secret")
+		t.Fatal("expected error for missing user token")
 	}
 }
 
@@ -148,6 +153,7 @@ type mockFeishuFunc struct {
 	fn func(chatID string) ([]harvesting.ContextItem, error)
 }
 
-func (m *mockFeishuFunc) ListMessages(_ context.Context, chatID string, _, _ time.Time) ([]harvesting.ContextItem, error) {
+// 签名变更：新增 userToken 参数（决策 #7）
+func (m *mockFeishuFunc) ListMessages(_ context.Context, _ string, chatID string, _, _ time.Time) ([]harvesting.ContextItem, error) {
 	return m.fn(chatID)
 }
