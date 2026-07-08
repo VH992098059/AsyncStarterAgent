@@ -26,9 +26,10 @@ type ChatRequest struct {
 
 // ChatChunk is a streaming chunk from the LLM (FR-C03).
 type ChatChunk struct {
-	Content string
-	Done    bool
-	Err     error
+	Content   string
+	Reasoning string // reasoning/thinking content
+	Done      bool
+	Err       error
 }
 
 // LLMClient is the interface for LLM chat with streaming (FR-C03).
@@ -115,6 +116,9 @@ func (e *EinoLLM) readStream(ctx context.Context, stream *schema.StreamReader[*s
 		if err != nil {
 			e.sendChunk(ctx, out, ChatChunk{Err: err})
 			return
+		}
+		if msg.ReasoningContent != "" {
+			e.sendChunk(ctx, out, ChatChunk{Reasoning: msg.ReasoningContent})
 		}
 		if msg.Content != "" {
 			e.sendChunk(ctx, out, ChatChunk{Content: msg.Content})

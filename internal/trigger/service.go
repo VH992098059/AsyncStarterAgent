@@ -2,8 +2,6 @@ package trigger
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,11 +16,12 @@ func NewService(pool *pgxpool.Pool, m *Matcher) *Service {
 	return &Service{pool: pool, matcher: m}
 }
 
-// ProcessKeyword 处理关键词触发事件
+// ProcessKeyword 处理关键词触发事件。
+// 当没有规则匹配时，回退为 message 类型，确保任意用户输入都能创建任务。
 func (s *Service) ProcessKeyword(ctx context.Context, userID uuid.UUID, text string) (uuid.UUID, error) {
 	taskType, ok := s.matcher.Match(text)
 	if !ok {
-		return uuid.Nil, fmt.Errorf("no rule matched")
+		taskType = "message"
 	}
 	return s.createRun(ctx, userID, taskType, SourceKeyword, text)
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -82,6 +83,7 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 
 	status := "success"
 	if adapterErr != nil {
+		s.markRunStatus(ctx, runID, "failed", "delivery", adapterErr.Error())
 		return nil, adapterErr
 	}
 	if err != nil {
@@ -90,6 +92,7 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 			`UPDATE deliveries SET status = $1, error_message = $2, updated_at = $3 WHERE id = $4`,
 			status, err.Error(), time.Now(), deliveryID,
 		)
+		s.markRunStatus(ctx, runID, "failed", "delivery", err.Error())
 		return &DeliverResult{DeliveryID: deliveryID.String(), Status: status}, err
 	}
 
@@ -98,6 +101,7 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 		targetURL, status, time.Now(), deliveryID,
 	)
 	if err != nil {
+		s.markRunStatus(ctx, runID, "failed", "delivery", err.Error())
 		return nil, fmt.Errorf("update delivery: %w", err)
 	}
 
@@ -109,7 +113,20 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 		_ = s.notif.Notify(ctx, "草稿已交付", title)
 	}
 
+	s.markRunStatus(ctx, runID, "completed", "delivery", "")
 	return &DeliverResult{DeliveryID: deliveryID.String(), TargetURL: targetURL, Status: status}, nil
+}
+
+// markRunStatus 回写 agent_runs 状态。失败仅记日志，不阻断交付主流程。
+func (s *Service) markRunStatus(ctx context.Context, runID, status, stage, errMsg string) {
+	runUUID, parseErr := uuid.Parse(runID)
+	if parseErr != nil {
+		log.Printf("[delivery] invalid run id %q: %v", runID, parseErr)
+		return
+	}
+	if err := repository.UpdateAgentRunStatus(ctx, s.pool, runUUID, status, stage, errMsg); err != nil {
+		log.Printf("[delivery] update run status to %s/%s: %v", status, stage, err)
+	}
 }
 
 func (s *Service) updateSourceComment(ctx context.Context, userID uuid.UUID, runID, targetType, targetURL, title string) error {

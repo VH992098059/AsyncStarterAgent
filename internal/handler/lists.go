@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/asyncstarter/agent/internal/auth"
 	"github.com/asyncstarter/agent/internal/repository"
@@ -97,11 +98,17 @@ type AgentRunStats struct {
 	Today map[string]int `json:"today"`
 }
 
-// GetAgentRuns GET /api/v1/agent-runs?limit=20
+// GetAgentRuns GET /api/v1/agent-runs?limit=20&before=<RFC3339>
+// before 用于游标分页：仅返回 created_at 严格早于 before 的记录。
+// before 解析失败时按未传处理（宽松降级，不返回 400）。
 func (h *ListHandler) GetAgentRuns(c *gin.Context) {
 	uid, ok := auth.MustUserID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusUnauthorized, 4001, "no user in context")
+		return
+	}
+	if h.Pool == nil {
+		httpx.Fail(c, http.StatusServiceUnavailable, 5001, "pool not configured")
 		return
 	}
 	limit := 20
@@ -112,7 +119,13 @@ func (h *ListHandler) GetAgentRuns(c *gin.Context) {
 			limit = n
 		}
 	}
-	runs, err := repository.ListAgentRuns(c.Request.Context(), h.Pool, uid, limit)
+	var before *time.Time
+	if b := c.Query("before"); b != "" {
+		if t, err := time.Parse(time.RFC3339, b); err == nil {
+			before = &t
+		}
+	}
+	runs, err := repository.ListAgentRuns(c.Request.Context(), h.Pool, uid, limit, before)
 	if err != nil {
 		httpx.Fail(c, http.StatusInternalServerError, 5001, "list agent runs")
 		return

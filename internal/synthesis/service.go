@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 
+	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -171,6 +174,16 @@ func (s *Service) GenerateDraftStream(ctx context.Context, runID, userID, taskTy
 		return fmt.Errorf("generate draft: %w", err)
 	}
 
+	// 状态回写：草稿生成成功，run 标记为 running/synthesis（等待交付）。
+	// 状态回写失败不阻断主流程（草稿已生成），仅记日志。
+	if runUUID, parseErr := uuid.Parse(runID); parseErr == nil && s.pool != nil {
+		if err := repository.UpdateAgentRunStatus(ctx, s.pool, runUUID, "running", "synthesis", ""); err != nil {
+			log.Printf("[synthesis] update run status to running/synthesis: %v", err)
+		}
+	} else if parseErr != nil {
+		log.Printf("[synthesis] invalid run id %q: %v", runID, parseErr)
+	}
+
 	if s.pool != nil {
 		marksJSON, _ := marshalMarks(result.Marks)
 		_, saveErr := s.pool.Exec(ctx,
@@ -233,4 +246,241 @@ func marshalMarks(marks []Mark) ([]byte, error) {
 		out[i] = markJSON(m)
 	}
 	return json.Marshal(out)
+}
+
+// MarshalMarks 导出版本，供 handler 层更新草稿时序列化 marks 用。
+func MarshalMarks(marks []Mark) ([]byte, error) {
+	return marshalMarks(marks)
+}
+
+// ResolveMark 解析草稿中的某个 [待补充:xxx] 占位符，用 value 替换并落库。
+// 返回替换后的新 markdown。归属校验由调用方（handler）负责。
+func (s *Service) ResolveMark(ctx context.Context, runID, markID, value string) (string, error) {
+	runUUID, err := uuid.Parse(runID)
+	if err != nil {
+		return "", fmt.Errorf("invalid run id: %w", err)
+	}
+	draft, err := repository.GetDraftByRunID(ctx, s.pool, runUUID)
+	if err != nil {
+		return "", fmt.Errorf("load draft: %w", err)
+	}
+	repoMarks, err := repository.UnmarshalMarks(draft.Marks)
+	if err != nil {
+		return "", fmt.Errorf("unmarshal marks: %w", err)
+	}
+	marks := make([]Mark, len(repoMarks))
+	for i, m := range repoMarks {
+		marks[i] = Mark{ID: m.ID, Hint: m.Hint, Position: m.Position, Resolved: m.Resolved}
+	}
+	newMd, err := ReplaceMark(draft.MarkdownContent, markID, marks, value)
+	if err != nil {
+		return "", fmt.Errorf("replace mark: %w", err)
+	}
+	newMarks := ExtractMarks(newMd)
+	comp := Completeness(newMd)
+	marksJSON, err := marshalMarks(newMarks)
+	if err != nil {
+		return "", fmt.Errorf("marshal marks: %w", err)
+	}
+	if err := repository.UpdateDraftMarkdown(ctx, s.pool, runUUID, newMd, marksJSON, comp); err != nil {
+		return "", fmt.Errorf("update draft: %w", err)
+	}
+	return newMd, nil
+}
+
+// ChatWithRun 对指定 run 执行单轮 LLM 对话（不跑完整 RAG workflow）。
+// 流程：归属校验 → 落库 user message(sent) → 拉历史(含刚落的 user msg) →
+// 落库 assistant 占位(streaming) → 加载草稿作为 context → 构造 system+历史 →
+// LLM 流式 → WriteChatDelta 累积 → 结束 UpdateMessageStatus(done) / 失败 (error)。
+//
+// 草稿不存在时不阻断（用空串），允许用户在草稿生成前就开 chat。
+func (s *Service) ChatWithRun(ctx context.Context, runID, userID, userMessage string, w *A2UIWriter) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user id: %w", err)
+	}
+	runUUID, err := uuid.Parse(runID)
+	if err != nil {
+		return fmt.Errorf("invalid run id: %w", err)
+	}
+
+	// 1. 归属校验 + 查 task_type
+	run, err := repository.GetAgentRunByID(ctx, s.pool, uid, runUUID)
+	if err != nil {
+		return fmt.Errorf("load run: %w", err)
+	}
+
+	// 2. 落库 user message（status='sent'）
+	userMsg := &repository.AgentRunMessage{
+		AgentRunID: runUUID,
+		UserID:     uid,
+		Role:       "user",
+		Content:    userMessage,
+		Status:     "sent",
+	}
+	if _, err := repository.CreateMessage(ctx, s.pool, userMsg); err != nil {
+		return fmt.Errorf("save user message: %w", err)
+	}
+
+	// 3. 拉历史消息（最近 20 条，含刚落的 user message）
+	history, err := repository.ListMessagesByRun(ctx, s.pool, runUUID, 20)
+	if err != nil {
+		return fmt.Errorf("load history: %w", err)
+	}
+
+	// 4/5/6. 并发执行：存 assistant 占位 + 加载草稿 + 获取 LLM 客户端
+	// 这三个步骤互不依赖，并行执行压缩耗时
+	type step4Result struct {
+		id    uuid.UUID
+		idStr string
+		err   error
+	}
+	type step5Result struct {
+		content string
+	}
+	type step6Result struct {
+		client    LLMClient
+		temp      float32
+		maxTokens int
+		err       error
+	}
+
+	ch4 := make(chan step4Result, 1)
+	ch5 := make(chan step5Result, 1)
+	ch6 := make(chan step6Result, 1)
+
+	// step4: 存 assistant 占位
+	go func() {
+		assistantMsg := &repository.AgentRunMessage{
+			AgentRunID: runUUID,
+			UserID:     uid,
+			Role:       "assistant",
+			Content:    "",
+			Status:     "streaming",
+		}
+		id, err := repository.CreateMessage(ctx, s.pool, assistantMsg)
+		ch4 <- step4Result{id: id, idStr: id.String(), err: err}
+	}()
+
+	// step5: 加载草稿
+	go func() {
+		draftMd := ""
+		if draft, dErr := repository.GetDraftByRunID(ctx, s.pool, runUUID); dErr == nil {
+			draftMd = draft.MarkdownContent
+		}
+		ch5 <- step5Result{content: draftMd}
+	}()
+
+	// step6: 获取 LLM 客户端
+	go func() {
+		llm, err := s.factory.GetLLM(ctx, uid)
+		if err != nil {
+			ch6 <- step6Result{err: err}
+			return
+		}
+		ch6 <- step6Result{
+			client:    llm,
+			temp:      s.factory.GetLLMTemperature(ctx, uid),
+			maxTokens: s.factory.GetLLMMaxTokens(ctx, uid),
+		}
+	}()
+
+	// 等待三个步骤完成
+	r4 := <-ch4
+	r5 := <-ch5
+	r6 := <-ch6
+
+	if r4.err != nil {
+		return fmt.Errorf("save assistant placeholder: %w", r4.err)
+	}
+	assistantID := r4.id
+	assistantIDStr := r4.idStr
+	draftMd := r5.content
+
+	if r6.err != nil {
+		_ = repository.UpdateMessageStatus(ctx, s.pool, assistantID, "error", "", "", r6.err.Error())
+		_ = w.WriteChatError(assistantIDStr, r6.err.Error())
+		return fmt.Errorf("get llm: %w", r6.err)
+	}
+	llm := r6.client
+	temp := r6.temp
+	maxTokens := r6.maxTokens
+
+	// 7. 构造 LLM messages：system（含 task_type + 草稿）+ 历史
+	// 历史只取 user(sent) + assistant(done)，跳过 error/streaming 避免干扰上下文
+	systemContent := fmt.Sprintf(
+		"你是一个专业的文档助手。当前任务类型：%s。你可以基于已生成的草稿回答用户问题或修改草稿内容。",
+		run.TaskType,
+	)
+	if draftMd != "" {
+		systemContent += "\n\n当前草稿内容：\n" + draftMd
+	} else {
+		systemContent += "\n\n（草稿尚未生成，可直接回答用户问题。）"
+	}
+
+	msgs := []Message{{Role: "system", Content: systemContent}}
+	for _, m := range history {
+		switch {
+		case m.Role == "user":
+			msgs = append(msgs, Message{Role: "user", Content: m.Content})
+		case m.Role == "assistant" && m.Status == "done":
+			msgs = append(msgs, Message{Role: "assistant", Content: m.Content})
+		}
+	}
+
+	// 8. LLM 流式调用
+	ch, err := llm.Chat(ctx, ChatRequest{
+		Messages:    msgs,
+		Temperature: temp,
+		MaxTokens:   maxTokens,
+	})
+	if err != nil {
+		_ = repository.UpdateMessageStatus(ctx, s.pool, assistantID, "error", "", "", err.Error())
+		_ = w.WriteChatError(assistantIDStr, err.Error())
+		return fmt.Errorf("llm chat: %w", err)
+	}
+
+	// 9. 消费流式 channel，写 chat delta + 累积 fullContent + fullReasoning
+	var fullContent strings.Builder
+	var fullReasoning strings.Builder
+	streamErr := error(nil)
+	for chunk := range ch {
+		if chunk.Err != nil {
+			streamErr = chunk.Err
+			break
+		}
+		if chunk.Done {
+			break
+		}
+		// 推理内容（DeepSeek thinking）- 实时流式发送 + 累积存储
+		if chunk.Reasoning != "" {
+			fullReasoning.WriteString(chunk.Reasoning)
+			if wErr := w.WriteChatReasoning(assistantIDStr, chunk.Reasoning); wErr != nil {
+				streamErr = wErr
+				break
+			}
+		}
+		// 正式回复内容
+		if chunk.Content == "" {
+			continue
+		}
+		fullContent.WriteString(chunk.Content)
+		if wErr := w.WriteChatDelta(assistantIDStr, chunk.Content); wErr != nil {
+			streamErr = wErr
+			break
+		}
+	}
+
+	if streamErr != nil {
+		errMsg := streamErr.Error()
+		_ = repository.UpdateMessageStatus(ctx, s.pool, assistantID, "error", "", fullReasoning.String(), errMsg)
+		_ = w.WriteChatError(assistantIDStr, errMsg)
+		return fmt.Errorf("llm stream: %w", streamErr)
+	}
+
+	// 10. 流式成功结束，落库完整 assistant 内容 + 推理内容
+	if err := repository.UpdateMessageStatus(ctx, s.pool, assistantID, "done", fullContent.String(), fullReasoning.String(), ""); err != nil {
+		log.Printf("[synthesis] update assistant message status to done: %v", err)
+	}
+	return w.WriteChatComplete(assistantIDStr)
 }

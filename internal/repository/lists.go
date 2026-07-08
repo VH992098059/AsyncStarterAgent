@@ -45,16 +45,18 @@ func ListDataSources(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) 
 }
 
 // ListAgentRuns 拉取某用户的 AgentRun 列表（按 created_at desc）。
-// limit 0 → 默认 20。
-func ListAgentRuns(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, limit int) ([]AgentRun, error) {
+// limit 0 → 默认 20。before 非 nil 时只返回 created_at < before 的记录（游标分页）。
+func ListAgentRuns(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, limit int, before *time.Time) ([]AgentRun, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	rows, err := pool.Query(ctx,
 		`SELECT id, user_id, task_type, status, current_stage, trigger_type, COALESCE(trigger_source, ''),
-		        COALESCE(error_message, ''), created_at, updated_at, completed_at
-		 FROM agent_runs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
-		userID, limit,
+			        COALESCE(error_message, ''), created_at, updated_at, completed_at
+			 FROM agent_runs
+			 WHERE user_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2)
+			 ORDER BY created_at DESC LIMIT $3`,
+		userID, before, limit,
 	)
 	if err != nil {
 		return nil, err

@@ -43,20 +43,26 @@ func buildWorkflow(ctx context.Context, nodes []nodeDef) (compose.Runnable[workf
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("agent: at least one node required")
 	}
-	wf := compose.NewWorkflow[workflowState, workflowState]()
-	for i, nd := range nodes {
-		lambda := compose.InvokableLambda(nd.Fn)
-		node := wf.AddLambdaNode(nd.Key, lambda)
-		if i == 0 {
-			node.AddInput(compose.START)
-		} else {
-			node.AddInput(nodes[i-1].Key)
+	g := compose.NewGraph[workflowState, workflowState]()
+	for _, nd := range nodes {
+		if err := g.AddLambdaNode(nd.Key, compose.InvokableLambda(nd.Fn)); err != nil {
+			return nil, fmt.Errorf("agent: add node %q: %w", nd.Key, err)
 		}
 	}
-	wf.End().AddInput(nodes[len(nodes)-1].Key)
-	runner, err := wf.Compile(ctx)
+	if err := g.AddEdge(compose.START, nodes[0].Key); err != nil {
+		return nil, fmt.Errorf("agent: add edge START->%s: %w", nodes[0].Key, err)
+	}
+	for i := 1; i < len(nodes); i++ {
+		if err := g.AddEdge(nodes[i-1].Key, nodes[i].Key); err != nil {
+			return nil, fmt.Errorf("agent: add edge %s->%s: %w", nodes[i-1].Key, nodes[i].Key, err)
+		}
+	}
+	if err := g.AddEdge(nodes[len(nodes)-1].Key, compose.END); err != nil {
+		return nil, fmt.Errorf("agent: add edge %s->END: %w", nodes[len(nodes)-1].Key, err)
+	}
+	runner, err := g.Compile(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("agent: compile workflow: %w", err)
+		return nil, fmt.Errorf("agent: compile graph: %w", err)
 	}
 	return runner, nil
 }

@@ -96,11 +96,30 @@ func New(
 	th := &handler.TriggerHandler{Svc: trigSvc}
 	r.POST("/api/v1/trigger", authMW, th.ManualTrigger)
 
-	dh := &handler.DraftStreamHandler{Svc: synthSvc}
+	dh := &handler.DraftStreamHandler{Svc: synthSvc, Pool: pool}
 	r.GET("/api/v1/drafts/:id/stream", authMW, dh.Stream)
 
 	dlvH := &handler.DeliveryHandler{Svc: delivSvc}
 	r.POST("/api/v1/drafts/:id/deliver", authMW, dlvH.Deliver)
+
+	// AgentRun CRUD：详情/删除/取消/重试
+	arh := &handler.AgentRunHandler{Pool: pool}
+	r.GET("/api/v1/agent-runs/:id", authMW, arh.GetRun)
+	r.DELETE("/api/v1/agent-runs/:id", authMW, arh.DeleteRun)
+	r.POST("/api/v1/agent-runs/:id/cancel", authMW, arh.CancelRun)
+	r.POST("/api/v1/agent-runs/:id/retry", authMW, arh.RetryRun)
+
+	// Draft 详情/更新/mark 解决/交付历史
+	ddh := &handler.DraftDetailHandler{Pool: pool, Syn: synthSvc}
+	r.GET("/api/v1/drafts/:id", authMW, ddh.GetDraft)
+	r.PUT("/api/v1/drafts/:id", authMW, ddh.UpdateDraft)
+	r.POST("/api/v1/drafts/:id/marks/:markID/resolve", authMW, ddh.ResolveMark)
+	r.GET("/api/v1/drafts/:id/deliveries", authMW, ddh.ListDeliveries)
+
+	// Chat：历史消息 + 流式 LLM 对话（单轮续跑）
+	ch := &handler.ChatHandler{Pool: pool, Syn: synthSvc}
+	r.GET("/api/v1/agent-runs/:id/messages", authMW, ch.ListMessages)
+	r.POST("/api/v1/agent-runs/:id/chat", authMW, ch.Chat)
 
 	sh := &handler.SettingsHandler{Repo: settingsRepo, Fac: settingsFactory, Syn: synthSvc}
 	r.GET("/api/v1/settings", authMW, sh.Get)

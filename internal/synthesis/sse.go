@@ -7,12 +7,18 @@ import (
 )
 
 // SSEWriter writes Server-Sent Events to an HTTP response (FR-C05, NFR-04).
+//
+// Deprecated: use A2UIWriter instead. SSEWriter 使用 `event:` 前缀的 SSE 格式，
+// 而 A2UIWriter 使用无 event 前缀的 `data: {json}\n\n` 格式，前端 EventSource
+// onmessage 统一监听。新代码请用 internal/synthesis/a2ui.go 中的 A2UIWriter。
 type SSEWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
 }
 
 // NewSSEWriter creates an SSEWriter. Returns error if the ResponseWriter doesn't support flushing.
+//
+// Deprecated: use NewA2UIWriter instead.
 func NewSSEWriter(w http.ResponseWriter) (*SSEWriter, error) {
 	f, ok := w.(http.Flusher)
 	if !ok {

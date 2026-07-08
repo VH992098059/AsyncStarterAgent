@@ -17,6 +17,7 @@
 | 2026-06-25 12:30 | #4 | 新增持续对齐机制 §8.8（项目无关 / 可移植） |
 | 2026-06-25 13:00 | #5 | 前端修复收尾：触发器改用 JWT 上下文 / SSE 走 query token |
 | 2026-06-25 14:40 | #6 | CORS 中间件（dev 跨域预检 404 修复） |
+| 2026-07-08 19:00 | #7 | 飞书集成范围扩展：FR-D03 扩入 MVP + user_access_token + pgcrypto |
 
 ---
 
@@ -453,3 +454,90 @@
 - 新增 dev/桌面 origin 时，更新 `allowedOrigins` 常量
 - 生产部署前确认反向代理配置（如果直接 8080 暴露，需要扩白名单）
 - §6 §7 §8 检验：本决策 = "加 CORS 解决 dev 404"，未改接口 / 数据 / 业务逻辑，不属 §6.2 红色线
+
+---
+
+## [2026-07-08 19:00] 决策 #7 — 飞书集成范围扩展（FR-D03 扩入 MVP + user_access_token + pgcrypto）
+
+**问题**: 用户要求接入飞书 API 的"任务等功能"。经盘点，现有 `internal/harvesting/source/feishu.go` 仅做 IM 消息拉取（FR-B03）且未接线 wire.go；FR-D04（飞书任务备注回写，P0）未实现；FR-D03（飞书文档交付）在 plan-boundary.md 中标为 P2/V1.5（OUT of MVP）。用户选择全量接入并批准 FR-D03 扩入 MVP。
+
+**用户原话**:
+> "`k:\go_projects\AsyncStarterAgent` 这个我需要接入飞书的API，飞书的任务等功能，需要你使用AI编码规则技能，然后我们讨论一下"
+
+经 AskUserQuestion 三轮澄清，用户明确选择：
+1. 集成范围：拉取飞书任务 + 任务事件触发 AgentRun + 回写草稿链接到任务备注 + 交付到飞书文档（FR-D03）+ IM 适配器接线
+2. 鉴权模型：user_access_token（用户身份，OAuth 流程）
+3. FR-D03 范围处理：批准扩入 MVP
+4. Token 加密：pgcrypto 对称加密（DB_ENCRYPTION_KEY 环境变量 + pgp_sym_encrypt/pgp_sym_decrypt）
+
+**触发场景**:
+- 现有 feishu.go 是"孤儿代码"（写了未装配）
+- FR-D04（P0）规范要求但未实现
+- FR-D03（P2/OUT）用户主动要求扩入 → 触发 R5 红线（禁止实现超范围功能），需正式批准 + 更新 plan-boundary.md
+- user_access_token 方案涉及 OAuth 流程、token 存储、自动刷新，架构复杂度高
+
+**执行方案**:
+
+### 1. 范围扩展（plan-boundary.md 同步）
+- FR-D03 从 §2.3 V1.5 清单移入 §2.2 MVP-PLUS 清单，标注"扩入"
+- §3 矩阵 FR-D03 行：V1.5 → MVP-PLUS（扩）
+- 附录 A FR-D03 状态：暂缓 → 扩入 MVP
+
+### 2. 鉴权架构（user_access_token）
+- OAuth 2.0 授权码流程：前端跳转飞书授权页 → 回调 `GET /api/v1/auth/feishu/callback` → code 换 token → 存储
+- token 有效期 ~2h，refresh_token ~30d，过期自动刷新
+- SDK 用法：`client.Request(ctx, ..., lark.WithUserAccessToken(token))`
+
+### 3. Token 存储（独立表 + pgcrypto）
+- 新建 `feishu_tokens` 表（不扩展 user_settings，避免污染 settings 缓存）
+- 字段：user_id, access_token(加密), refresh_token(加密), expires_at, open_id, updated_at
+- 加密：pgcrypto 的 pgp_sym_encrypt/pgp_sym_decrypt，密钥从 `DB_ENCRYPTION_KEY` 环境变量
+
+### 4. 配置层
+- config.go + .env.example 新增：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_REDIRECT_URL` / `DB_ENCRYPTION_KEY`
+- settings.Factory 新增 `GetFeishuClient(ctx, userID)` 方法（检查过期 → 刷新 → 返回带 user token 的 client）
+
+### 5. 五项能力实现路径
+| 能力 | 文件 | SDK 调用 |
+|---|---|---|
+| IM 消息接线 | wire.go 装配现有 feishu.go | 已有 larkim |
+| 拉取飞书任务 | internal/harvesting/source/feishu_task.go | client.Task.V2.Task.List |
+| 任务事件触发 | internal/handler/webhook.go 加飞书处理器 | 飞书事件订阅 v2 |
+| 回写任务备注 | delivery/service.go updateSourceComment 加 feishu case | client.Task.V2.Comment.Create |
+| 交付飞书文档 | internal/delivery/feishu.go（替代现有 feishu_doc.go 骨架） | docx API |
+
+**AI 自决项**（按 §6 路径）:
+
+| 决策点 | 选择 | 理由 |
+|---|---|---|
+| token 存独立表 vs 扩 settings 表 | 独立 feishu_tokens 表 | token 2h 刷新频繁，独立表不干扰 settings 缓存；语义分离（凭证≠配置） |
+| 加密方案 | pgcrypto 对称加密 | 用户选定；无新 Go 依赖；DB 层加密便于审计 |
+| OAuth 回调路径 | /api/v1/auth/feishu/callback | 与现有 /api/v1/auth/* 风格一致 |
+| 前端授权入口 | 设置页内"飞书集成"区块 | 不新建独立页，复用现有 Settings 组件 |
+| 计划文件位置 | docs/superpowers/plans/2026-07-08-feishu-integration.md | 遵循 writing-plans skill 默认 + 项目已有 superpowers/plans/ 先例 |
+
+**影响范围**:
+
+| 范围 | 影响 |
+|---|---|
+| 规范 | FR-D03 从 V1.5 扩入 MVP-PLUS；plan-boundary.md 更新 |
+| 数据库 | 新增 feishu_tokens 表（migration 0010）+ pgcrypto 扩展 |
+| 配置 | .env.example 新增 4 个环境变量 |
+| 依赖 | 无新增（larksuite/oapi-sdk-go/v3 已有，需升级到 v3.4.25） |
+| 后端 | 新建 feishu_task.go / feishu.go(delivery) / feishu_auth.go；扩展 webhook.go / service.go / factory.go / wire.go / config.go |
+| 前端 | Settings 页新增飞书授权区块；交付选项加飞书文档；触发器配置加飞书事件源 |
+| 安全 | user_access_token 加密存储；OAuth state 防 CSRF |
+| 测试 | OAuth 流程 mock 测试 + 各适配器单测 + webhook 签名校验测试 |
+
+**未决问题**（实现时澄清）:
+1. 飞书事件订阅 challenge 验证方式（v1 明文 vs v2 加密）→ 实现时查最新文档
+2. 飞书文档 markdown → docx block 转换的完整度 → MVP 阶段做基础段落转换，复杂块（表格/代码块）V1.5 补
+3. token 刷新失败的降级策略 → 返回特定错误码，前端引导重新授权
+4. 多用户并发刷新 token 的锁 → MVP 单实例用 mutex，后续换 Redis 锁
+
+**后续窗口注意事项**:
+- 所有飞书 API 调用必须走 `lark.WithUserAccessToken(token)`，不能用 tenant token
+- feishu_doc.go 现有骨架（T025）将被本计划的完整实现替代
+- webhook 飞书处理器需处理事件签名校验（飞书 v2 事件用 X-Lark-Signature 头）
+- DB_ENCRYPTION_KEY 丢失 = 所有飞书 token 不可解密，需在部署文档强调备份
+- 升级 lark SDK v3.4.4 → v3.4.25 后需跑全量测试（M8 规则）

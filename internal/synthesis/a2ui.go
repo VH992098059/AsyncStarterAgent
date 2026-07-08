@@ -67,6 +67,42 @@ func (a *A2UIWriter) WriteError(message string) error {
 	})
 }
 
+// WriteChatDelta 写入 chat 流式 token，附 message_id 让前端定位对应的 assistant 气泡。
+// 区别于 WriteDelta（draft 流式），chat 事件独立 type 避免前端混用。
+func (a *A2UIWriter) WriteChatDelta(messageID, text string) error {
+	return a.write(map[string]string{
+		"type":       "chat_delta",
+		"message_id": messageID,
+		"text":       text,
+	})
+}
+
+// WriteChatReasoning 写入 chat 推理内容（thinking），前端可折叠显示。
+func (a *A2UIWriter) WriteChatReasoning(messageID, text string) error {
+	return a.write(map[string]string{
+		"type":       "chat_reasoning",
+		"message_id": messageID,
+		"text":       text,
+	})
+}
+
+// WriteChatComplete 标记某条 assistant 消息流式结束。
+func (a *A2UIWriter) WriteChatComplete(messageID string) error {
+	return a.write(map[string]string{
+		"type":       "chat_complete",
+		"message_id": messageID,
+	})
+}
+
+// WriteChatError 标记某条 assistant 消息流式失败。
+func (a *A2UIWriter) WriteChatError(messageID, message string) error {
+	return a.write(map[string]string{
+		"type":       "chat_error",
+		"message_id": messageID,
+		"message":    message,
+	})
+}
+
 type a2uiCtxKey struct{}
 
 func WithA2UIWriter(ctx context.Context, w *A2UIWriter) context.Context {

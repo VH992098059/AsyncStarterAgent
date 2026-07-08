@@ -67,7 +67,7 @@
 | --- | --- | --- |
 | FR-B02 扩展 | Outlook / Slack / Notion 数据源 | MVP 反馈缺口 |
 | FR-D02 | Obsidian 文件写入 | 用户画像-张远场景验证 |
-| FR-D03 | 飞书文档创建 | 林薇场景验证 |
+| FR-D03 | ~~飞书文档创建~~（已扩入 MVP-PLUS，见决策 #7） | 林薇场景验证 |
 | 自定义 Prompt 编辑器 | MVP OUT 推迟项 | 模板复用率 < 60% 时启动 |
 | 移动端推送（APNs/FCM） | MVP OUT 推迟项 | 桌面端日活 ≥ 100 时启动 |
 
@@ -115,7 +115,7 @@
 | FR-C05 SSE | P0 | CORE | 3 |
 | FR-D01 Notion 写入 | P0 | CORE | 4 |
 | FR-D02 Obsidian 写入 | P1 | V1.5 | 4 |
-| FR-D03 飞书写入 | P2 | V1.5 | 4 |
+| FR-D03 飞书写入 | P2 | MVP-PLUS（扩，决策 #7） | 4 |
 | FR-D04 任务备注 | P0 | CORE | 4 |
 | FR-D05 通知 | P1 | CORE | 4 |
 
@@ -392,7 +392,7 @@
 | FR-C05 | SSE 流式输出 | CORE | 3 | 待开发 |
 | FR-D01 | Notion 创建 | CORE | 4 | 待开发 |
 | FR-D02 | Obsidian 写入 | V1.5 | — | 暂缓 |
-| FR-D03 | 飞书创建 | V1.5 | — | 暂缓 |
+| FR-D03 | 飞书创建 | MVP-PLUS（扩） | 4 | 扩入（决策 #7） |
 | FR-D04 | 任务备注 | CORE | 4 | 待开发 |
 | FR-D05 | 通知推送 | CORE | 4 | 待开发 |
 
