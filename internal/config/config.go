@@ -9,21 +9,26 @@ import (
 
 // Config 集中管理应用配置（环境变量加载）
 type Config struct {
-	Env                  string
-	Port                 string
-	DSN                  string
-	RedisURL             string
-	JWTSecret            string
-	TodoistWebhookSecret string
-	OpenAIKey            string
-	OpenAIModel          string
-	OpenAIBaseURL        string
-	EmbeddingAPIKey      string
-	EmbeddingModel       string
-	EmbeddingBaseURL     string
-	ObsidianVaultPath    string
-	NotionAPIKey         string
-	NotionParentPageID   string
+	Env                     string
+	Port                    string
+	DSN                     string
+	RedisURL                string
+	JWTSecret               string
+	TodoistWebhookSecret    string
+	OpenAIKey               string
+	OpenAIModel             string
+	OpenAIBaseURL           string
+	EmbeddingAPIKey         string
+	EmbeddingModel          string
+	EmbeddingBaseURL        string
+	ObsidianVaultPath       string
+	NotionAPIKey            string
+	NotionParentPageID      string
+	FeishuAppID             string // 决策 #7: 飞书应用 AppID
+	FeishuAppSecret         string // 决策 #7: 飞书应用 AppSecret
+	FeishuRedirectURL       string // 决策 #7: OAuth 回调地址
+	FeishuVerificationToken string // 决策 #7: 飞书事件订阅 Verification Token（webhook 校验）
+	DBEncryptionKey         string // 决策 #7: pgcrypto 对称加密密钥
 }
 
 // Load 从环境变量加载配置；自动加载 .env 文件；生产环境强制要求 JWT_SECRET
@@ -43,21 +48,26 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Env:                  env,
-		Port:                 port,
-		DSN:                  dsn,
-		RedisURL:             redis,
-		JWTSecret:            jwt,
-		TodoistWebhookSecret: todoistSecret,
-		OpenAIKey:            getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:          getEnv("OPENAI_MODEL", "gpt-4o-mini"),
-		OpenAIBaseURL:        getEnv("OPENAI_BASE_URL", ""),
-		EmbeddingAPIKey:      getEnv("EMBEDDING_API_KEY", ""),
-		EmbeddingModel:       getEnv("EMBEDDING_MODEL", "text-embedding-3-small"),
-		EmbeddingBaseURL:     getEnv("EMBEDDING_BASE_URL", ""),
-		ObsidianVaultPath:    getEnv("OBSIDIAN_VAULT_PATH", ""),
-		NotionAPIKey:         getEnv("NOTION_API_KEY", ""),
-		NotionParentPageID:   getEnv("NOTION_PARENT_PAGE_ID", ""),
+		Env:                     env,
+		Port:                    port,
+		DSN:                     dsn,
+		RedisURL:                redis,
+		JWTSecret:               jwt,
+		TodoistWebhookSecret:    todoistSecret,
+		OpenAIKey:               getEnv("OPENAI_API_KEY", ""),
+		OpenAIModel:             getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		OpenAIBaseURL:           getEnv("OPENAI_BASE_URL", ""),
+		EmbeddingAPIKey:         getEnv("EMBEDDING_API_KEY", ""),
+		EmbeddingModel:          getEnv("EMBEDDING_MODEL", "text-embedding-3-small"),
+		EmbeddingBaseURL:        getEnv("EMBEDDING_BASE_URL", ""),
+		ObsidianVaultPath:       getEnv("OBSIDIAN_VAULT_PATH", ""),
+		NotionAPIKey:            getEnv("NOTION_API_KEY", ""),
+		NotionParentPageID:      getEnv("NOTION_PARENT_PAGE_ID", ""),
+		FeishuAppID:             getEnv("FEISHU_APP_ID", ""),
+		FeishuAppSecret:         getEnv("FEISHU_APP_SECRET", ""),
+		FeishuRedirectURL:       getEnv("FEISHU_REDIRECT_URL", "http://localhost:8080/api/v1/auth/feishu/callback"),
+		FeishuVerificationToken: getEnv("FEISHU_VERIFICATION_TOKEN", ""),
+		DBEncryptionKey:         getEnv("DB_ENCRYPTION_KEY", ""),
 	}, nil
 }
 
