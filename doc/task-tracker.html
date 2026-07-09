@@ -249,6 +249,7 @@
             <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 2">P2</button>
             <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 3">P3</button>
             <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 4">P4</button>
+            <button class="filter-btn text-xs px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 transition" data-phase="Phase 5">P5</button>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -343,6 +344,20 @@
       { id:'T024', name:'Obsidian Vault交付', phase:'Phase 4', priority:'P1', status:'已完成', module:'后端', start:'W12', end:'W13', deps:['T018'], criteria:'可写入Markdown文件' },
       { id:'T025', name:'飞书文档交付', phase:'Phase 4', priority:'P2', status:'已完成', module:'后端', start:'W13', end:'W13', deps:['T018'], criteria:'可创建飞书文档' },
       { id:'T026', name:'Eino Workflow编排集成', phase:'Phase 3', priority:'P0', status:'已完成', module:'后端', start:'W9', end:'W10', deps:['T016'], criteria:'Eino Workflow5阶段DAG可编译运行' },
+
+      // 决策 #7：飞书集成（plan: 2026-07-08-feishu-integration.md，F001-F012，全部已完成）
+      { id:'F001', name:'飞书token表+pgcrypto加密', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W14', end:'W14', deps:['T003'], criteria:'feishu_tokens表创建，加解密可用' },
+      { id:'F002', name:'飞书配置字段', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W14', end:'W14', deps:[], criteria:'config.go含飞书4字段' },
+      { id:'F003', name:'token存储层(加解密+%w)', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W14', end:'W14', deps:['F001'], criteria:'TokenStore Save/Get/Delete单测通过' },
+      { id:'F004', name:'OAuth client(code换token)', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W14', end:'W14', deps:['F002'], criteria:'ExchangeCode/RefreshToken单测通过' },
+      { id:'F005', name:'per-user client工厂(自动刷新)', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W14', end:'W15', deps:['F003','F004'], criteria:'WithUserAccessToken注入+过期刷新' },
+      { id:'F006', name:'settings工厂接线飞书', phase:'Phase 5', priority:'P1', status:'已完成', module:'后端', start:'W15', end:'W15', deps:['F005'], criteria:'GetFeishuClient可用' },
+      { id:'F007', name:'per-user token适配器', phase:'Phase 5', priority:'P1', status:'已完成', module:'后端', start:'W15', end:'W15', deps:['F005'], criteria:'harvesting按user_id注入token' },
+      { id:'F008', name:'飞书任务拉取适配器', phase:'Phase 5', priority:'P1', status:'已完成', module:'后端', start:'W15', end:'W15', deps:['F007'], criteria:'feishu_task.go单测通过' },
+      { id:'F009', name:'飞书事件订阅webhook', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W15', end:'W15', deps:['F003'], criteria:'challenge校验+任务事件触发AgentRun' },
+      { id:'F010', name:'飞书文档交付适配器', phase:'Phase 5', priority:'P2', status:'已完成', module:'后端', start:'W15', end:'W16', deps:['F005'], criteria:'CreateDoc单测通过(FR-D03)' },
+      { id:'F011', name:'任务评论回写', phase:'Phase 5', priority:'P0', status:'已完成', module:'后端', start:'W15', end:'W16', deps:['F009','F010'], criteria:'parseFeishuTaskGUID 10单测+集成测试(FR-D04)' },
+      { id:'F012', name:'前端授权UI+API client', phase:'Phase 5', priority:'P1', status:'已完成', module:'前端', start:'W15', end:'W16', deps:['F004'], criteria:'设置页飞书授权区块+visibilitychange刷新' },
     ];
 
     // 阶段定义
@@ -352,6 +367,7 @@
       { name:'Phase 2', label:'上下文搜集', color:'#a78bfa' },
       { name:'Phase 3', label:'草稿生成', color:'#c4b5fd' },
       { name:'Phase 4', label:'前端与交付', color:'#818cf8' },
+      { name:'Phase 5', label:'飞书集成（决策#7）', color:'#10b981' },
     ];
 
     // 关键路径任务ID

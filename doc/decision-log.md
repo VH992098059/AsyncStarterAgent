@@ -18,6 +18,7 @@
 | 2026-06-25 13:00 | #5 | 前端修复收尾：触发器改用 JWT 上下文 / SSE 走 query token |
 | 2026-06-25 14:40 | #6 | CORS 中间件（dev 跨域预检 404 修复） |
 | 2026-07-08 19:00 | #7 | 飞书集成范围扩展：FR-D03 扩入 MVP + user_access_token + pgcrypto |
+| 2026-07-09 22:30 | #7 | 飞书集成实现完成：F001-F012 全部交付（12 提交），build/vet/test 全绿 |
 
 ---
 
@@ -541,3 +542,42 @@
 - webhook 飞书处理器需处理事件签名校验（飞书 v2 事件用 X-Lark-Signature 头）
 - DB_ENCRYPTION_KEY 丢失 = 所有飞书 token 不可解密，需在部署文档强调备份
 - 升级 lark SDK v3.4.4 → v3.4.25 后需跑全量测试（M8 规则）
+
+### 实现完成记录（2026-07-09）
+
+**状态**: ✅ 全部交付。分支 `feat/feishu-integration`，基线 `94e120e`，HEAD `c07b1cf`，共 12 个提交。
+
+**交付清单**（plan: docs/superpowers/plans/2026-07-08-feishu-integration.md，F001-F012）:
+
+| 任务 | 内容 | 关键文件 | 提交 |
+|---|---|---|---|
+| F001 | feishu_tokens 表（pgcrypto） | migrations/0010_feishu_tokens.up.sql | fe8d4a9 |
+| F002 | config 飞书字段 | internal/config/config.go | ef85bf7 |
+| F003 | token store（加解密 + %w 包装） | internal/feishu/token_store.go | e87c980 |
+| F004 | OAuth client（code exchange + refresh） | internal/feishu/auth.go | 2d6e0b1 |
+| F005 | per-user client factory（自动刷新） | internal/feishu/client_factory.go | c06d0b8 |
+| F006 | settings factory 接线 | internal/settings/factory.go | 6aac646 |
+| F007 | per-user token 适配器 + wire Deps | internal/harvesting/source/feishu.go | 40b0ac5 |
+| F008 | 飞书任务拉取适配器 | internal/harvesting/source/feishu_task.go | 77b400e |
+| F009 | 飞书事件订阅 webhook | internal/handler/webhook.go | 9edf390 |
+| F010 | 飞书文档交付适配器 | internal/delivery/feishu.go | ef11396 |
+| F011 | 任务评论回写 | internal/delivery/service.go | ef11396 |
+| F012 | 前端授权 UI + API client | web/src/components/Settings.tsx, web/src/api/feishu.ts | a01cd3e |
+
+**集成修复**（最终集成审查发现）: `c07b1cf` — webhook 未提取 task guid 导致 trigger_source 断链，评论回写失效。新增 `ProcessKeywordWithSource` + `parseFeishuTaskGUID` 纯函数 + 10 单测打通数据流。
+
+**实现期关键架构修正**（代码质量审查 ❌ → 已修复）:
+1. **CSRF cookie → 服务端 state store**: 原 cookie 方案在 Tauri/跨源部署根本失效（cookie 在 webview，授权在系统浏览器，回调读不到）。改为服务端 `oauthStateStore`（map+mutex+TTL+一次性 Consume），state 走 URL 传递，全拓扑可用。
+2. **Callback 响应 JSON/重定向 → HTML 页面**: API-only 后端 `/?feishu_auth=success` 会 404，JSON 在浏览器导航下显示为裸文本。改为返回深色主题 HTML 成功/错误页，前端用 `visibilitychange` 感知返回并刷新授权状态。
+3. **raw c.JSON → httpx 信封**: 前端 `apiFetch<T>` 期望 `{code,message,data}`，授权相关端点统一改用 `httpx.OK`/`httpx.Fail`。
+4. **Status 错误归类**: `errors.Is(err, pgx.ErrNoRows)` 区分"未授权"与"服务端错误"，避免 DB 故障误报未授权。
+5. **内部错误泄露**: Callback/Revoke 失败路径改 `log.Printf` 记录完整错误 + 对外泛化文案。
+
+**验证**: `go build ./...` = 0；`go vet ./...` = 0；`go test ./...` 全 PASS（feishu/handler/delivery/trigger/server 等包）。
+
+**遗留/延期项**（非阻塞）:
+- OAuth E2E 手动验证（需真实飞书应用凭证，留给用户）
+- `oauthStateStore` 为内存存储（单实例 Tauri 够用；多实例需换 Redis）
+- webhook 未做 event_id 幂等去重（飞书重试可能创建重复 AgentRun，加固项独立任务）
+- 飞书文档 markdown→docx 仅基础段落转换（表格/代码块 V1.5 补）
+- `harvesting.Pipeline` 未在 wire.go 构造（项目预存模式，所有源适配器共用，非飞书特有）
