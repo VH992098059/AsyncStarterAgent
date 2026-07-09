@@ -58,6 +58,10 @@ func (m *mockFactory) GetObsidianAdapter(_ context.Context, _ uuid.UUID) (*Obsid
 	return m.obs, nil
 }
 
+func (m *mockFactory) GetFeishuAdapter(_ context.Context, _ uuid.UUID) (*FeishuAdapter, error) {
+	return nil, fmt.Errorf("feishu not configured")
+}
+
 func TestNewService(t *testing.T) {
 	notif := &mockNotifier{}
 	svc := NewService(nil, &mockFactory{}, notif)

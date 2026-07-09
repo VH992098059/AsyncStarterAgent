@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/asyncstarter/agent/internal/repository"
@@ -77,6 +78,14 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 			break
 		}
 		targetURL, err = obs.WriteFile(ctx, title, md)
+	case "feishu":
+		// 决策 #7: 飞书云文档交付
+		feishu, ferr := s.factory.GetFeishuAdapter(ctx, uid)
+		if ferr != nil {
+			adapterErr = ferr
+			break
+		}
+		targetURL, err = feishu.CreateDoc(ctx, title, md)
 	default:
 		return nil, fmt.Errorf("unsupported target type: %s", targetType)
 	}
@@ -88,12 +97,21 @@ func (s *Service) Deliver(ctx context.Context, userID, runID, targetType string)
 	}
 	if err != nil {
 		status = "failed"
-		_, _ = s.pool.Exec(ctx,
-			`UPDATE deliveries SET status = $1, error_message = $2, updated_at = $3 WHERE id = $4`,
-			status, err.Error(), time.Now(), deliveryID,
-		)
+		// 部分成功场景（如飞书文档已创建但 block 写入失败）：targetURL 非空时
+		// 一并落库，保证用户仍能拿到已创建文档的链接。
+		if targetURL != "" {
+			_, _ = s.pool.Exec(ctx,
+				`UPDATE deliveries SET status = $1, error_message = $2, target_url = $3, updated_at = $4 WHERE id = $5`,
+				status, err.Error(), targetURL, time.Now(), deliveryID,
+			)
+		} else {
+			_, _ = s.pool.Exec(ctx,
+				`UPDATE deliveries SET status = $1, error_message = $2, updated_at = $3 WHERE id = $4`,
+				status, err.Error(), time.Now(), deliveryID,
+			)
+		}
 		s.markRunStatus(ctx, runID, "failed", "delivery", err.Error())
-		return &DeliverResult{DeliveryID: deliveryID.String(), Status: status}, err
+		return &DeliverResult{DeliveryID: deliveryID.String(), TargetURL: targetURL, Status: status}, err
 	}
 
 	_, err = s.pool.Exec(ctx,
@@ -140,8 +158,35 @@ func (s *Service) updateSourceComment(ctx context.Context, userID uuid.UUID, run
 		return notion.UpdateTaskComment(ctx, pageID, fmt.Sprintf("已生成: %s", title))
 	case "obsidian":
 		return nil
+	case "feishu":
+		// 决策 #7: 回写草稿链接到原始飞书任务备注
+		// 需要从 agent_run 的 trigger_source 取 task_guid
+		taskGUID, err := s.getFeishuTaskGUID(ctx, runID)
+		if err != nil {
+			return nil // 没有关联的飞书任务，静默跳过
+		}
+		adapter, err := s.factory.GetFeishuAdapter(ctx, userID)
+		if err != nil {
+			// 适配器获取失败，静默跳过（评论回写为非关键副作用，与 notion 分支保持一致）
+			return nil
+		}
+		return adapter.CreateTaskComment(ctx, taskGUID, fmt.Sprintf("起跑器草稿: %s\n%s", title, targetURL))
 	}
 	return nil
+}
+
+// getFeishuTaskGUID 从 agent_run.trigger_source 解析飞书任务 GUID。
+// trigger_source 格式假设为 "feishu:task:<guid>"；不匹配时返回错误（调用方静默跳过）。
+func (s *Service) getFeishuTaskGUID(ctx context.Context, runID string) (string, error) {
+	var src string
+	err := s.pool.QueryRow(ctx, `SELECT trigger_source FROM agent_runs WHERE id = $1`, runID).Scan(&src)
+	if err != nil {
+		return "", fmt.Errorf("get feishu task guid: %w", err)
+	}
+	if !strings.HasPrefix(src, "feishu:task:") {
+		return "", fmt.Errorf("not a feishu task trigger")
+	}
+	return strings.TrimPrefix(src, "feishu:task:"), nil
 }
 
 func extractPageID(url string) string {

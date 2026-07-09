@@ -269,3 +269,12 @@ func (f *Factory) IsFeishuAuthorized(ctx context.Context, userID uuid.UUID) bool
 	}
 	return f.feishuCli.IsAuthorized(ctx, userID)
 }
+
+// GetFeishuAdapter 返回飞书交付适配器（per-user，决策 #7）
+func (f *Factory) GetFeishuAdapter(ctx context.Context, userID uuid.UUID) (*delivery.FeishuAdapter, error) {
+	cli, token, err := f.GetFeishuClient(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return delivery.NewFeishuAdapter(cli, token), nil
+}
