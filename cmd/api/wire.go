@@ -9,6 +9,7 @@ import (
 	"github.com/asyncstarter/agent/internal/config"
 	"github.com/asyncstarter/agent/internal/delivery"
 	"github.com/asyncstarter/agent/internal/feishu"
+	"github.com/asyncstarter/agent/internal/handler"
 	"github.com/asyncstarter/agent/internal/queue"
 	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/asyncstarter/agent/internal/server"
@@ -22,19 +23,20 @@ import (
 )
 
 type Deps struct {
-	Cfg             *config.Config
-	Pool            *pgxpool.Pool
-	Trigger         *trigger.Service
-	Queue           *queue.Client
-	Syn             *synthesis.Service
-	Deliv           *delivery.Service
-	Auth            *auth.Service
-	AuthMgr         *auth.Manager
-	AuthBL          *auth.Blacklist
-	Matcher         *trigger.Matcher
-	SettingsRepo    *settings.Repo
-	SettingsFactory *settings.Factory
-	FeishuFactory   *feishu.ClientFactory
+	Cfg               *config.Config
+	Pool              *pgxpool.Pool
+	Trigger           *trigger.Service
+	Queue             *queue.Client
+	Syn               *synthesis.Service
+	Deliv             *delivery.Service
+	Auth              *auth.Service
+	AuthMgr           *auth.Manager
+	AuthBL            *auth.Blacklist
+	Matcher           *trigger.Matcher
+	SettingsRepo      *settings.Repo
+	SettingsFactory   *settings.Factory
+	FeishuFactory     *feishu.ClientFactory
+	FeishuAuthHandler *handler.FeishuAuthHandler
 }
 
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
@@ -79,6 +81,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 
 	// 决策 #7: 飞书 OAuth + token 工厂
 	var feishuFactory *feishu.ClientFactory
+	var feishuAuthHandler *handler.FeishuAuthHandler
 	if cfg.FeishuAppID != "" && cfg.FeishuAppSecret != "" {
 		tokenStore := feishu.NewTokenStore(pool, cfg.DBEncryptionKey)
 		authClient := feishu.NewAuthClient(feishu.OAuthConfig{
@@ -87,6 +90,8 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			RedirectURL: cfg.FeishuRedirectURL,
 		})
 		feishuFactory = feishu.NewClientFactory(cfg.FeishuAppID, cfg.FeishuAppSecret, tokenStore, authClient)
+		// F012: 飞书 OAuth 授权 UI 后端 handler（StartAuth / Callback / Status / Revoke）
+		feishuAuthHandler = handler.NewFeishuAuthHandler(authClient, tokenStore)
 		log.Println("[feishu] client factory initialized")
 	} else {
 		log.Println("[feishu] disabled (FEISHU_APP_ID not set)")
@@ -109,22 +114,23 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	log.Println("[ddl] scheduler started")
 
 	return &Deps{
-		Cfg:             cfg,
-		Pool:            pool,
-		Trigger:         trigSvc,
-		Queue:           q,
-		Syn:             synSvc,
-		Deliv:           delivSvc,
-		Auth:            authSvc,
-		AuthMgr:         jwtMgr,
-		AuthBL:          authBL,
-		Matcher:         matcher,
-		SettingsRepo:    settingsRepo,
-		SettingsFactory: settingsFactory,
-		FeishuFactory:   feishuFactory,
+		Cfg:               cfg,
+		Pool:              pool,
+		Trigger:           trigSvc,
+		Queue:             q,
+		Syn:               synSvc,
+		Deliv:             delivSvc,
+		Auth:              authSvc,
+		AuthMgr:           jwtMgr,
+		AuthBL:            authBL,
+		Matcher:           matcher,
+		SettingsRepo:      settingsRepo,
+		SettingsFactory:   settingsFactory,
+		FeishuFactory:     feishuFactory,
+		FeishuAuthHandler: feishuAuthHandler,
 	}, nil
 }
 
 func (d *Deps) Server() *gin.Engine {
-	return server.New(d.Cfg, d.Pool, d.Trigger, d.Syn, d.Deliv, d.Auth, d.AuthMgr, d.AuthBL, d.Matcher, d.SettingsRepo, d.SettingsFactory)
+	return server.New(d.Cfg, d.Pool, d.Trigger, d.Syn, d.Deliv, d.Auth, d.AuthMgr, d.AuthBL, d.Matcher, d.SettingsRepo, d.SettingsFactory, d.FeishuAuthHandler)
 }

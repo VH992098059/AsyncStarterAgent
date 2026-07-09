@@ -48,6 +48,7 @@ func New(
 	matcher *trigger.Matcher,
 	settingsRepo *settings.Repo,
 	settingsFactory *settings.Factory,
+	feishuAuthHandler *handler.FeishuAuthHandler,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -129,6 +130,16 @@ func New(
 	r.GET("/api/v1/settings", authMW, sh.Get)
 	r.PUT("/api/v1/settings", authMW, sh.Update)
 	r.POST("/api/v1/settings/test-llm", authMW, sh.TestLLM)
+
+	// 决策 #7: 飞书 OAuth 授权流程（F012）
+	// feishuAuthHandler 为 nil 时（FEISHU_APP_ID 未配置）跳过路由注册。
+	// Callback 无 authMW：飞书回跳时浏览器无 JWT，靠 state 中的 user_id 恢复身份。
+	if feishuAuthHandler != nil {
+		r.GET("/api/v1/auth/feishu/start", authMW, feishuAuthHandler.StartAuth)
+		r.GET("/api/v1/auth/feishu/status", authMW, feishuAuthHandler.Status)
+		r.POST("/api/v1/auth/feishu/revoke", authMW, feishuAuthHandler.Revoke)
+		r.GET("/api/v1/auth/feishu/callback", feishuAuthHandler.Callback)
+	}
 
 	return r
 }

@@ -7,6 +7,12 @@ import {
   isMaskedKey,
   type UserSettings,
 } from "../api/client";
+import {
+  getFeishuStatus,
+  startFeishuAuth,
+  revokeFeishuAuth,
+  type FeishuAuthStatus,
+} from "../api/feishu";
 import { showToast } from "./Layout";
 import { useRipple } from "../hooks/useRipple";
 
@@ -43,9 +49,9 @@ interface FieldProps {
 function Field({ label, hint, children }: FieldProps) {
   return (
     <div>
-      <label className="block text-xs font-medium text-zinc-400 mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">{label}</label>
       {children}
-      {hint && <p className="text-[11px] text-zinc-600 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-[var(--text-muted)] mt-1">{hint}</p>}
     </div>
   );
 }
@@ -54,7 +60,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full px-3 py-2.5 rounded-xl bg-black/30 border border-white/5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/30 transition-colors ${props.className ?? ""}`}
+      className={`w-full px-3 py-2.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-emerald-500/30 transition-colors ${props.className ?? ""}`}
     />
   );
 }
@@ -63,8 +69,8 @@ function SectionCard({ title, desc, children }: { title: string; desc?: string; 
   return (
     <div className="app-card p-6 mb-4">
       <div className="mb-5">
-        <h3 className="text-base font-semibold tracking-tight text-zinc-200">{title}</h3>
-        {desc && <p className="text-xs text-zinc-500 mt-1">{desc}</p>}
+        <h3 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">{title}</h3>
+        {desc && <p className="text-xs text-[var(--text-secondary)] mt-1">{desc}</p>}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -78,6 +84,8 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [preset, setPreset] = useState<string>("custom");
+  const [feishuStatus, setFeishuStatus] = useState<FeishuAuthStatus | null>(null);
+  const [feishuLoading, setFeishuLoading] = useState(false);
   const ripple = useRipple();
 
   const load = useCallback(async () => {
@@ -101,6 +109,26 @@ export function Settings() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 飞书授权状态加载
+  // 用户从飞书授权页返回应用时（页面重新可见），自动刷新授权状态。
+  // Callback 不再重定向到前端（后端返回 HTML 成功页），改用 visibilitychange 感知返回。
+  useEffect(() => {
+    getFeishuStatus()
+      .then(setFeishuStatus)
+      .catch(() => {
+        // 静默：未授权或接口不可用时 status 保持 null，UI 显示"未授权"
+      });
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        getFeishuStatus()
+          .then(setFeishuStatus)
+          .catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const handlePresetChange = (presetId: string) => {
     setPreset(presetId);
@@ -161,6 +189,37 @@ export function Settings() {
     }
   };
 
+  // 拉起飞书 OAuth 授权：调后端拿 authorize_url，浏览器跳转过去
+  const handleStartFeishuAuth = async (e: React.MouseEvent<HTMLElement>) => {
+    ripple(e);
+    if (feishuLoading) return;
+    setFeishuLoading(true);
+    try {
+      const res = await startFeishuAuth();
+      window.location.href = res.authorize_url;
+      // 不重置 loading：页面即将跳转，重置会导致按钮短暂可点击
+    } catch (err) {
+      showToast("授权失败", err instanceof Error ? err.message : String(err), "error");
+      setFeishuLoading(false);
+    }
+  };
+
+  // 撤销飞书授权：删除后端 token 记录
+  const handleRevokeFeishu = async (e: React.MouseEvent<HTMLElement>) => {
+    ripple(e);
+    if (feishuLoading) return;
+    setFeishuLoading(true);
+    try {
+      await revokeFeishuAuth();
+      setFeishuStatus({ status: "not_authorized", name: "" });
+      showToast("已解除授权", "飞书授权已撤销", "success");
+    } catch (err) {
+      showToast("解除失败", err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setFeishuLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -179,14 +238,14 @@ export function Settings() {
     <div className="pb-28 md:pb-24">
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">设置</h1>
-          <p className="text-zinc-500 text-sm mt-1.5">AI 模型、Embedding 及第三方服务配置</p>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-[var(--text-primary)]">设置</h1>
+          <p className="text-[var(--text-secondary)] text-sm mt-1.5">AI 模型、Embedding 及第三方服务配置</p>
         </div>
         <div className="flex gap-2 shrink-0">
           <button
             onClick={(e) => { ripple(e); handleTest(); }}
             disabled={testing || saving}
-            className="px-4 py-2.5 rounded-xl border border-white/10 text-sm text-zinc-300 hover:bg-zinc-800/60 btn-press ripple-container disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl border border-[var(--border-default)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] btn-press ripple-container disabled:opacity-50 flex items-center gap-2"
           >
             {testing ? (
               <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -216,12 +275,12 @@ export function Settings() {
               onClick={(e) => { ripple(e); handlePresetChange(p.id); }}
               className={`px-3 py-2.5 rounded-xl border text-sm text-left transition-all btn-press ripple-container ${
                 preset === p.id
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                  : "border-white/5 bg-black/20 text-zinc-400 hover:border-white/10 hover:text-zinc-300"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:border-[var(--border-default)] hover:text-[var(--text-primary)]"
               }`}
             >
               <div className="flex items-center gap-2">
-                {!p.cloud && <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 shrink-0">本地</span>}
+                {!p.cloud && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-[var(--text-muted)] shrink-0">本地</span>}
                 <span className="font-medium truncate">{p.name}</span>
               </div>
             </button>
@@ -276,7 +335,7 @@ export function Settings() {
             onChange={(e) => handleChange("llm_temperature", parseFloat(e.target.value))}
             className="w-full accent-emerald-500"
           />
-          <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+          <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
             <span>精确 (0.0)</span>
             <span>平衡 (0.7)</span>
             <span>创意 (2.0)</span>
@@ -347,8 +406,64 @@ export function Settings() {
         </Field>
       </SectionCard>
 
+      <SectionCard title="飞书集成" desc="授权后可拉取飞书任务、接收任务事件、交付到飞书文档">
+        {feishuStatus?.status === "authorized" ? (
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {feishuStatus.name || "已授权"}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">飞书账号已绑定</p>
+              </div>
+            </div>
+            <button
+              onClick={handleRevokeFeishu}
+              disabled={feishuLoading}
+              className="px-4 py-2.5 rounded-xl border border-[var(--border-default)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] btn-press ripple-container disabled:opacity-50 flex items-center gap-2"
+            >
+              {feishuLoading ? (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              ) : null}
+              解除授权
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-muted)] shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--text-primary)]">未授权</p>
+                <p className="text-xs text-[var(--text-muted)]">点击右侧按钮绑定飞书账号</p>
+              </div>
+            </div>
+            <button
+              onClick={handleStartFeishuAuth}
+              disabled={feishuLoading}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium btn-press ripple-container disabled:opacity-50 flex items-center gap-2 hover:bg-emerald-400 transition-colors"
+            >
+              {feishuLoading ? (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              ) : null}
+              授权飞书账号
+            </button>
+          </div>
+        )}
+      </SectionCard>
+
       <div className="text-center py-4">
-        <p className="text-xs text-zinc-600">所有配置仅保存到服务端数据库</p>
+        <p className="text-xs text-[var(--text-muted)]">所有配置仅保存到服务端数据库</p>
       </div>
     </div>
   );
