@@ -1,19 +1,25 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 
+	"github.com/asyncstarter/agent/internal/config"
 	"github.com/asyncstarter/agent/internal/trigger"
 	"github.com/asyncstarter/agent/pkg/httpx"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type WebhookHandler struct {
 	Secret string
 	Svc    *trigger.Service
+	Pool   *pgxpool.Pool  // 决策 #7: 查 feishu_tokens 表
+	Cfg    *config.Config // 决策 #7: 读 FeishuVerificationToken
 }
 
 // noRuleMatchedErr 是 trigger.Service 返回的"无匹配规则"错误 sentinel。
@@ -77,4 +83,120 @@ func (h *WebhookHandler) Todoist(c *gin.Context) {
 
 func bindJSON(body []byte, v interface{}) error {
 	return jsonUnmarshal(body, v)
+}
+
+// HandleFeishuWebhook 处理飞书事件订阅推送
+// 路由: POST /api/v1/webhook/feishu
+// 决策 #7: 飞书任务事件触发 AgentRun
+func (h *WebhookHandler) HandleFeishuWebhook(c *gin.Context) {
+	var payload struct {
+		Challenge string `json:"challenge"` // URL 校验时飞书下发
+		Token     string `json:"token"`     // 事件订阅 Verification Token（顶层兼容旧格式）
+		Type      string `json:"type"`      // url_verification / event_callback
+		Header    struct {
+			EventID    string `json:"event_id"`
+			EventType  string `json:"event_type"`
+			Token      string `json:"token"`
+			CreateTime string `json:"create_time"`
+		} `json:"header"`
+		Event map[string]interface{} `json:"event"`
+	}
+
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	// 1. URL 校验：返回 challenge
+	if payload.Type == "url_verification" {
+		c.JSON(http.StatusOK, gin.H{"challenge": payload.Challenge})
+		return
+	}
+
+	// 2. Token 校验（防伪造）。header.token 优先，回退顶层 token（飞书旧版格式）
+	token := payload.Header.Token
+	if token == "" {
+		token = payload.Token
+	}
+	if h.Cfg != nil && h.Cfg.FeishuVerificationToken != "" && token != h.Cfg.FeishuVerificationToken {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid verification token"})
+		return
+	}
+
+	// 3. 事件分发：只处理任务相关事件
+	eventType := payload.Header.EventType
+	switch eventType {
+	case "task.v2.task.created", "task.v2.task.updated":
+		h.handleFeishuTaskEvent(c, payload.Event)
+	default:
+		// 非任务事件，确认接收但不处理
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ignored"})
+	}
+}
+
+// handleFeishuTaskEvent 处理飞书任务事件，创建 AgentRun
+// MVP 限制：open_id → user_id 映射依赖 feishu_tokens 表的 open_id 字段。
+// 若用户未授权过飞书（表里无此 open_id），事件被忽略（返回 200 + user not mapped），
+// 避免飞书端因业务不匹配无限重试。
+//
+// MVP 限制：未做 event_id 幂等去重，飞书重试可能创建重复 AgentRun。
+// 加固项：基于 event_id 的短期去重表（独立任务）。
+func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, event map[string]interface{}) {
+	summary, _ := event["summary"].(string)
+	if summary == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "no summary"})
+		return
+	}
+
+	// 安全导航：operator_id 可能不存在或不是 map
+	openID := ""
+	if operator, ok := event["operator_id"].(map[string]interface{}); ok {
+		openID, _ = operator["open_id"].(string)
+	}
+	if openID == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "no operator"})
+		return
+	}
+
+	// Pool 未注入（server.New 误配置）时返回 503，避免 nil deref；
+	// 与下方 Svc == nil 检查对称。
+	if h.Pool == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db not configured"})
+		return
+	}
+
+	// 通过 open_id 查找系统用户（feishu_tokens 表的 open_id 字段，F001 已建）
+	userID, err := h.findUserByOpenID(c.Request.Context(), openID)
+	if err != nil {
+		// 头号"为什么没触发"原因：open_id 未在 feishu_tokens 表中映射到系统用户。
+		// 200 + user not mapped 让飞书端停止重试（业务正常，非系统错误）。
+		log.Printf("[feishu-webhook] user not mapped for open_id=%s", openID)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "user not mapped"})
+		return
+	}
+
+	// 创建 AgentRun。h.Svc 是 *trigger.Service，ProcessKeyword 签名 (ctx, userID uuid.UUID, text string)
+	if h.Svc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trigger service not configured"})
+		return
+	}
+	if _, err := h.Svc.ProcessKeyword(c.Request.Context(), userID, summary); err != nil {
+		// 记录真实错误用于诊断，但对外只返回通用消息（不泄露内部错误细节，
+		// 与 Todoist handler webhook.go:76 的 "create run" 风格一致）。
+		log.Printf("[feishu-webhook] ProcessKeyword failed: open_id=%s err=%v", openID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "create run"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ok"})
+}
+
+// findUserByOpenID 通过飞书 open_id 查找系统用户
+func (h *WebhookHandler) findUserByOpenID(ctx context.Context, openID string) (uuid.UUID, error) {
+	var userID uuid.UUID
+	err := h.Pool.QueryRow(ctx, `SELECT user_id FROM feishu_tokens WHERE open_id = $1`, openID).Scan(&userID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("user not found for open_id %s: %w", openID, err)
+	}
+	return userID, nil
 }

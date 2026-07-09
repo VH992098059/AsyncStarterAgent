@@ -85,8 +85,12 @@ func New(
 	wh := &handler.WebhookHandler{
 		Secret: cfg.TodoistWebhookSecret,
 		Svc:    trigSvc,
+		Pool:   pool, // 决策 #7: 查 feishu_tokens
+		Cfg:    cfg,  // 决策 #7: 读 FeishuVerificationToken
 	}
 	r.POST("/api/v1/webhook/todoist", wh.Todoist)
+	// 决策 #7: 飞书事件订阅 webhook（无需登录中间件，飞书直接推送）
+	r.POST("/api/v1/webhook/feishu", wh.HandleFeishuWebhook)
 
 	lh := &handler.ListHandler{Pool: pool, Matcher: matcher}
 	r.GET("/api/v1/keywords", authMW, lh.GetKeywords)
