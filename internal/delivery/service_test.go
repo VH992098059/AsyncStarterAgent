@@ -131,3 +131,34 @@ func TestNewService_WithObsidian(t *testing.T) {
 		t.Fatal("nil service")
 	}
 }
+
+func TestParseFeishuTaskGUID(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		wantGUID string
+		wantOK   bool
+	}{
+		{"valid guid", "feishu:task:abc-123-def", "abc-123-def", true},
+		{"valid guid with dashes", "feishu:task:550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440000", true},
+		{"not feishu", "写周报", "", false},
+		{"keyword source", "keyword", "", false},
+		{"empty", "", "", false},
+		{"partial prefix no colon suffix", "feishu:task", "", false},
+		{"feishu:task: empty guid", "feishu:task:", "", false},
+		{"only prefix", "feishu:task", "", false},
+		{"feishu prefix only", "feishu", "", false},
+		{"todoist source", "todoist", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			guid, ok := parseFeishuTaskGUID(tc.src)
+			if ok != tc.wantOK {
+				t.Errorf("ok: want %v, got %v (src=%q)", tc.wantOK, ok, tc.src)
+			}
+			if guid != tc.wantGUID {
+				t.Errorf("guid: want %q, got %q (src=%q)", tc.wantGUID, guid, tc.src)
+			}
+		})
+	}
+}

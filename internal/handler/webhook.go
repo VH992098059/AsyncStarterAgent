@@ -148,6 +148,10 @@ func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, event map[string]
 		return
 	}
 
+	// 提取任务 GUID（飞书 task.v2 事件 payload 顶层字段，用于后续回写评论）。
+	// guid 缺失时回退到 summary 作为 trigger_source，主流程不阻断，仅不回写评论。
+	guid, _ := event["guid"].(string)
+
 	// 安全导航：operator_id 可能不存在或不是 map
 	openID := ""
 	if operator, ok := event["operator_id"].(map[string]interface{}); ok {
@@ -175,15 +179,23 @@ func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, event map[string]
 		return
 	}
 
-	// 创建 AgentRun。h.Svc 是 *trigger.Service，ProcessKeyword 签名 (ctx, userID uuid.UUID, text string)
+	// 创建 AgentRun。h.Svc 是 *trigger.Service。
+	// 用 ProcessKeywordWithSource 指定 SourceFeishu 和精确 trigger_source，
+	// 让后续 delivery.Service 能从 trigger_source 解析 guid 回写评论。
 	if h.Svc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "trigger service not configured"})
 		return
 	}
-	if _, err := h.Svc.ProcessKeyword(c.Request.Context(), userID, summary); err != nil {
+	// 构造 trigger_source：有 guid 时用 "feishu:task:<guid>"（供 delivery 回写评论），
+	// 无 guid 时回退到 summary（不回写评论，但不阻断主流程）
+	triggerSource := summary
+	if guid != "" {
+		triggerSource = "feishu:task:" + guid
+	}
+	if _, err := h.Svc.ProcessKeywordWithSource(c.Request.Context(), userID, summary, trigger.SourceFeishu, triggerSource); err != nil {
 		// 记录真实错误用于诊断，但对外只返回通用消息（不泄露内部错误细节，
 		// 与 Todoist handler webhook.go:76 的 "create run" 风格一致）。
-		log.Printf("[feishu-webhook] ProcessKeyword failed: open_id=%s err=%v", openID, err)
+		log.Printf("[feishu-webhook] ProcessKeyword failed: open_id=%s guid=%s err=%v", openID, guid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create run"})
 		return
 	}

@@ -175,6 +175,19 @@ func (s *Service) updateSourceComment(ctx context.Context, userID uuid.UUID, run
 	return nil
 }
 
+// parseFeishuTaskGUID 从 trigger_source 字符串解析飞书任务 GUID。
+// 预期格式 "feishu:task:<guid>"；不匹配或 guid 为空时返回 ("", false)。
+func parseFeishuTaskGUID(src string) (string, bool) {
+	if !strings.HasPrefix(src, "feishu:task:") {
+		return "", false
+	}
+	guid := strings.TrimPrefix(src, "feishu:task:")
+	if guid == "" {
+		return "", false
+	}
+	return guid, true
+}
+
 // getFeishuTaskGUID 从 agent_run.trigger_source 解析飞书任务 GUID。
 // trigger_source 格式假设为 "feishu:task:<guid>"；不匹配时返回错误（调用方静默跳过）。
 func (s *Service) getFeishuTaskGUID(ctx context.Context, runID string) (string, error) {
@@ -183,10 +196,11 @@ func (s *Service) getFeishuTaskGUID(ctx context.Context, runID string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("get feishu task guid: %w", err)
 	}
-	if !strings.HasPrefix(src, "feishu:task:") {
+	guid, ok := parseFeishuTaskGUID(src)
+	if !ok {
 		return "", fmt.Errorf("not a feishu task trigger")
 	}
-	return strings.TrimPrefix(src, "feishu:task:"), nil
+	return guid, nil
 }
 
 func extractPageID(url string) string {

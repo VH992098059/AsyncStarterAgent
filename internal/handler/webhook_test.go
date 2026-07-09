@@ -339,9 +339,10 @@ func TestWebhook_Feishu_TaskEvent_Matched(t *testing.T) {
 	h := &handler.WebhookHandler{Svc: svc, Pool: pool, Cfg: &config.Config{}}
 
 	// task.v2.task.created 事件：summary 含"周报"关键词（DefaultMatcherRules 匹配），
-	// operator_id.open_id 指向 seed 行
+	// operator_id.open_id 指向 seed 行，guid 用于验证 trigger_source 回写链路
+	taskGUID := "test-task-guid-" + uuid.New().String()
 	body := `{"type":"event_callback","header":{"event_type":"task.v2.task.created","event_id":"evt-feishu-` +
-		uuid.New().String() + `","token":""},"event":{"summary":"写本周周报","operator_id":{"open_id":"` + openID + `"}}}`
+		uuid.New().String() + `","token":""},"event":{"summary":"写本周周报","guid":"` + taskGUID + `","operator_id":{"open_id":"` + openID + `"}}}`
 
 	r := gin.New()
 	r.POST("/api/v1/webhook/feishu", h.HandleFeishuWebhook)
@@ -362,5 +363,27 @@ func TestWebhook_Feishu_TaskEvent_Matched(t *testing.T) {
 	}
 	if resp["msg"] != "ok" {
 		t.Errorf("expected msg=ok, got %q body=%s", resp["msg"], w.Body.String())
+	}
+
+	// 验证 trigger_source 包含 feishu:task: 前缀 + guid（FR-D04 评论回写链路贯通）
+	// 查最近一条该 user 的 agent_run（避免依赖 Handler 返回 runID）。
+	var triggerSource string
+	err = pool.QueryRow(context.Background(),
+		`SELECT trigger_source FROM agent_runs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		userID).Scan(&triggerSource)
+	if err != nil {
+		t.Fatalf("query trigger_source: %v", err)
+	}
+	wantSource := "feishu:task:" + taskGUID
+	if triggerSource != wantSource {
+		t.Errorf("trigger_source: want %q, got %q", wantSource, triggerSource)
+	}
+	// 同时验证 trigger_type=feishu，确保 ProcessKeywordWithSource 的 src 参数生效
+	var triggerType string
+	_ = pool.QueryRow(context.Background(),
+		`SELECT trigger_type FROM agent_runs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+		userID).Scan(&triggerType)
+	if triggerType != "feishu" {
+		t.Errorf("trigger_type: want %q, got %q", "feishu", triggerType)
 	}
 }
