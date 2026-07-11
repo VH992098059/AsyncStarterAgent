@@ -33,8 +33,7 @@ coverage.txt
 # Frontend build artifacts / deps
 web/node_modules/
 web/dist/
-web/src-tauri/target/
-web/src-tauri/.cargo/
+web/src-tauri/
 
 # Docs (local notes/handoffs, not tracked)
 /doc/
