@@ -29,3 +29,8 @@ coverage.txt
 
 # Worktrees
 .worktrees/
+
+# Frontend build artifacts / deps
+web/node_modules/
+web/dist/
+web/src-tauri/target/
