@@ -40,10 +40,9 @@ func (m *mockHTTPDoer) Do(req *http.Request) (*http.Response, error) {
 
 func TestAuthorizeURL(t *testing.T) {
 	c := NewAuthClient(OAuthConfig{
-		AppID:       "cli_xxx",
 		RedirectURL: "http://localhost:8080/api/v1/auth/feishu/callback",
 	})
-	u := c.AuthorizeURL("random-state-123")
+	u := c.AuthorizeURL("cli_xxx", "random-state-123")
 	if !strings.Contains(u, "app_id=cli_xxx") {
 		t.Errorf("missing app_id: %s", u)
 	}
@@ -74,11 +73,9 @@ func TestExchangeCode_Success(t *testing.T) {
 		}`,
 	}
 	c := NewAuthClient(OAuthConfig{
-		AppID:      "cli_xxx",
-		AppSecret:  "sec_yyy",
 		HTTPClient: doer,
 	})
-	tr, err := c.ExchangeCode(context.Background(), "code-123")
+	tr, err := c.ExchangeCode(context.Background(), "cli_xxx", "sec_yyy", "code-123")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
@@ -109,8 +106,8 @@ func TestExchangeCode_Error(t *testing.T) {
 	doer := &mockHTTPDoer{
 		respBody: `{"code": 10001, "msg": "invalid code"}`,
 	}
-	c := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	_, err := c.ExchangeCode(context.Background(), "bad")
+	c := NewAuthClient(OAuthConfig{HTTPClient: doer})
+	_, err := c.ExchangeCode(context.Background(), "cli_xxx", "secret_yyy", "bad")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -135,8 +132,8 @@ func TestRefreshToken_Success(t *testing.T) {
 			}
 		}`,
 	}
-	c := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	tr, err := c.RefreshToken(context.Background(), "ur-old")
+	c := NewAuthClient(OAuthConfig{HTTPClient: doer})
+	tr, err := c.RefreshToken(context.Background(), "x", "y", "ur-old")
 	if err != nil {
 		t.Fatalf("refresh: %v", err)
 	}

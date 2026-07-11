@@ -12,10 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// OAuthConfig 飞书 OAuth 应用配置
+// OAuthConfig 飞书 OAuth 应用配置（不含 AppID/AppSecret：这些按用户动态传入，见 AuthClient 各方法）
 type OAuthConfig struct {
-	AppID       string
-	AppSecret   string
 	RedirectURL string
 	// HTTPClient 可注入用于测试；nil 时用 http.DefaultClient
 	HTTPClient HTTPDoer
@@ -67,9 +65,9 @@ func NewAuthClient(cfg OAuthConfig) *AuthClient {
 
 // AuthorizeURL 构造飞书授权页 URL（前端跳转用）
 // state 用于 CSRF 防护，调用方生成随机串并暂存（如 session）
-func (c *AuthClient) AuthorizeURL(state string) string {
+func (c *AuthClient) AuthorizeURL(appID, state string) string {
 	q := url.Values{}
-	q.Set("app_id", c.cfg.AppID)
+	q.Set("app_id", appID)
 	q.Set("redirect_uri", c.cfg.RedirectURL)
 	q.Set("response_type", "code")
 	q.Set("state", state)
@@ -77,12 +75,12 @@ func (c *AuthClient) AuthorizeURL(state string) string {
 }
 
 // ExchangeCode 用授权码换 token
-func (c *AuthClient) ExchangeCode(ctx context.Context, code string) (*TokenResponse, error) {
+func (c *AuthClient) ExchangeCode(ctx context.Context, appID, appSecret, code string) (*TokenResponse, error) {
 	body := url.Values{}
 	body.Set("grant_type", "authorization_code")
 	body.Set("code", code)
-	body.Set("app_id", c.cfg.AppID)
-	body.Set("app_secret", c.cfg.AppSecret)
+	body.Set("app_id", appID)
+	body.Set("app_secret", appSecret)
 	encoded := body.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, feishuTokenURL, strings.NewReader(encoded))
@@ -117,12 +115,12 @@ func (c *AuthClient) ExchangeCode(ctx context.Context, code string) (*TokenRespo
 }
 
 // RefreshToken 用 refresh_token 刷新 access_token
-func (c *AuthClient) RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
+func (c *AuthClient) RefreshToken(ctx context.Context, appID, appSecret, refreshToken string) (*TokenResponse, error) {
 	body := url.Values{}
 	body.Set("grant_type", "refresh_token")
 	body.Set("refresh_token", refreshToken)
-	body.Set("app_id", c.cfg.AppID)
-	body.Set("app_secret", c.cfg.AppSecret)
+	body.Set("app_id", appID)
+	body.Set("app_secret", appSecret)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, feishuRefreshURL, strings.NewReader(body.Encode()))
 	if err != nil {
