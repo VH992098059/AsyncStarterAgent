@@ -34,3 +34,8 @@ coverage.txt
 web/node_modules/
 web/dist/
 web/src-tauri/target/
+web/src-tauri/.cargo/
+
+# Docs (local notes/handoffs, not tracked)
+/doc/
+/docs/
