@@ -24,8 +24,6 @@ type Config struct {
 	ObsidianVaultPath       string
 	NotionAPIKey            string
 	NotionParentPageID      string
-	FeishuAppID             string // 决策 #7: 飞书应用 AppID
-	FeishuAppSecret         string // 决策 #7: 飞书应用 AppSecret
 	FeishuRedirectURL       string // 决策 #7: OAuth 回调地址
 	FeishuVerificationToken string // 决策 #7: 飞书事件订阅 Verification Token（webhook 校验）
 	DBEncryptionKey         string // 决策 #7: pgcrypto 对称加密密钥
@@ -47,11 +45,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required in production")
 	}
 
-	feishuAppID := getEnv("FEISHU_APP_ID", "")
-	feishuAppSecret := getEnv("FEISHU_APP_SECRET", "")
 	dbEncryptionKey := getEnv("DB_ENCRYPTION_KEY", "")
-	if feishuAppID != "" && feishuAppSecret != "" && dbEncryptionKey == "" {
-		return nil, fmt.Errorf("DB_ENCRYPTION_KEY is required when FEISHU_APP_ID/FEISHU_APP_SECRET are set")
+	if dbEncryptionKey == "" {
+		return nil, fmt.Errorf("DB_ENCRYPTION_KEY is required (used to encrypt per-user feishu credentials)")
 	}
 
 	return &Config{
@@ -70,8 +66,6 @@ func Load() (*Config, error) {
 		ObsidianVaultPath:       getEnv("OBSIDIAN_VAULT_PATH", ""),
 		NotionAPIKey:            getEnv("NOTION_API_KEY", ""),
 		NotionParentPageID:      getEnv("NOTION_PARENT_PAGE_ID", ""),
-		FeishuAppID:             feishuAppID,
-		FeishuAppSecret:         feishuAppSecret,
 		FeishuRedirectURL:       getEnv("FEISHU_REDIRECT_URL", "http://localhost:8080/api/v1/auth/feishu/callback"),
 		FeishuVerificationToken: getEnv("FEISHU_VERIFICATION_TOKEN", ""),
 		DBEncryptionKey:         dbEncryptionKey,
