@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,12 +17,17 @@ type mockHTTPDoer struct {
 	respStatus int
 	lastURL    string
 	lastBody   string
+	// delay 在返回响应前等待的时长，用于测试并发场景下真实耗时的刷新
+	delay time.Duration
 }
 
 func (m *mockHTTPDoer) Do(req *http.Request) (*http.Response, error) {
 	m.lastURL = req.URL.String()
 	bodyBytes, _ := io.ReadAll(req.Body)
 	m.lastBody = string(bodyBytes)
+	if m.delay > 0 {
+		time.Sleep(m.delay)
+	}
 	status := m.respStatus
 	if status == 0 {
 		status = 200

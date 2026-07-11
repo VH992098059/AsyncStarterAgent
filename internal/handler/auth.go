@@ -2,11 +2,13 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/asyncstarter/agent/internal/auth"
+	"github.com/asyncstarter/agent/internal/ratelimit"
 	"github.com/asyncstarter/agent/pkg/httpx"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -16,8 +18,11 @@ import (
 type AuthHandler struct {
 	Svc *auth.Service
 	Mgr *auth.Manager
-	BL  *auth.Blacklist
+	BL  auth.BlacklistStore
 	TTL time.Duration
+	// LoginLimiter 限制单个用户名的登录尝试频率，防止暴力破解密码。为 nil 时不限流
+	// （如未配置 Redis），保持向后兼容。
+	LoginLimiter *ratelimit.Limiter
 }
 
 type registerRequest struct {
@@ -72,13 +77,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // Login POST /api/v1/auth/login
+// 限流：按用户名维度限制尝试次数（防暴力破解），Redis 不可达时 fail-open（放行）。
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.Fail(c, http.StatusBadRequest, 4001, "请求格式不正确")
 		return
 	}
-	id, username, err := h.Svc.Login(c.Request.Context(), strings.TrimSpace(req.Username), req.Password)
+	uname := strings.TrimSpace(req.Username)
+	if h.LoginLimiter != nil {
+		key := fmt.Sprintf("loginrl:%s", uname)
+		if !h.LoginLimiter.Allow(c.Request.Context(), key) {
+			httpx.Fail(c, http.StatusTooManyRequests, 4029, "登录尝试次数过多，请稍后再试")
+			return
+		}
+	}
+	id, username, err := h.Svc.Login(c.Request.Context(), uname, req.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredential) {
 			httpx.Fail(c, http.StatusUnauthorized, 4001, "用户名或密码错误，请检查后重试")

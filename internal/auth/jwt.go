@@ -75,9 +75,16 @@ func (m *Manager) Parse(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// Blacklist 是 JWT 黑名单（按 token jti 撤销）。
+// BlacklistStore 抽象黑名单存储，便于在内存实现（Blacklist）和 Redis 实现
+// （RedisBlacklist，见 blacklist_redis.go）之间切换。
+type BlacklistStore interface {
+	Revoke(tokenID string, ttl time.Duration)
+	IsRevoked(tokenID string) bool
+}
+
+// Blacklist 是 JWT 黑名单的内存实现（按 token jti 撤销）。
 // 线程安全；过期条目惰性清理（IsRevoked 时扫描过期）。
-// MVP 单实例内存足够；跨实例部署后续替换为 Redis。
+// 单实例场景可用；跨实例部署/需要重启保留撤销记录时用 RedisBlacklist（问题 #9）。
 type Blacklist struct {
 	mu      sync.RWMutex
 	entries map[string]time.Time

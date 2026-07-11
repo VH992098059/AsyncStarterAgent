@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/asyncstarter/agent/internal/auth"
+	"github.com/asyncstarter/agent/internal/queue"
 	"github.com/asyncstarter/agent/internal/trigger"
 	"github.com/asyncstarter/agent/pkg/httpx"
 	"github.com/gin-gonic/gin"
@@ -11,6 +14,10 @@ import (
 
 type TriggerHandler struct {
 	Svc *trigger.Service
+	// Queue 用于把草稿生成任务异步入队给 worker（问题 #11）。为 nil 时（未配置 Redis
+	// 或 worker 未接入）静默跳过入队——DraftStreamHandler.Stream 的同步兜底逻辑
+	// 仍会在前端打开 SSE 时生成草稿，保持向后兼容。
+	Queue *queue.Client
 }
 
 type triggerRequest struct {
@@ -38,6 +45,13 @@ func (h *TriggerHandler) ManualTrigger(c *gin.Context) {
 	if err != nil {
 		httpx.Fail(c, http.StatusBadRequest, 4001, err.Error())
 		return
+	}
+	// 问题 #11: 手动触发的草稿生成入队给 worker 异步处理。入队失败不阻断 trigger 主流程
+	// （run 已创建），仅记日志——DraftStreamHandler.Stream 的同步兜底会在前端打开 SSE 时补跑。
+	if h.Queue != nil {
+		if err := h.Queue.Enqueue(c.Request.Context(), queue.TaskDraftGenerate, runID.String(), 5*time.Minute); err != nil {
+			log.Printf("[trigger] enqueue draft:generate failed for run_id=%s: %v", runID, err)
+		}
 	}
 	httpx.OK(c, triggerResponse{RunID: runID.String()})
 }

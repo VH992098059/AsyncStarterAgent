@@ -65,3 +65,44 @@ func (s *SyncStore) UpsertContextItem(ctx context.Context, item ContextItem) err
 	}
 	return nil
 }
+
+// UpsertContextItems 批量写入多条 context item（问题 #12：替代逐条 Exec 的 N+1 写法）。
+// 用 pgx.Batch 把所有 INSERT 语句一次性发给数据库（pipelined），避免同步窗口内数百上千条
+// context item 产生等量的网络往返。单条失败不中断整批：记录哪些 item 失败并返回聚合 error，
+// 与原逐条实现里"某条失败只记日志不阻断整体"的行为保持一致。
+func (s *SyncStore) UpsertContextItems(ctx context.Context, items []ContextItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, item := range items {
+		metaJSON, _ := json.Marshal(item.Metadata)
+		if metaJSON == nil {
+			metaJSON = []byte("{}")
+		}
+		batch.Queue(`
+			INSERT INTO context_items
+			(user_id, source, external_id, type, title, content, url, occurred_at, metadata)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (user_id, source, external_id) DO NOTHING
+		`, item.UserID, item.Source, item.ID, item.Type, item.Title, item.Content, item.URL, item.OccurredAt, metaJSON)
+	}
+
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	var firstErr error
+	failed := 0
+	for i := 0; i < len(items); i++ {
+		if _, err := br.Exec(); err != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = fmt.Errorf("upsert context item %s: %w", items[i].ID, err)
+			}
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("batch upsert: %d/%d items failed, first error: %w", failed, len(items), firstErr)
+	}
+	return nil
+}

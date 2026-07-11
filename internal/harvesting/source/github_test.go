@@ -90,6 +90,65 @@ func TestGitHubAdapter_FetchPRs_Mock(t *testing.T) {
 	}
 }
 
+func TestGitHubAdapter_FetchCommits_Paginates(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" || page == "1" {
+			w.Header().Set("Link", `<http://`+r.Host+`/repos/o/r/commits?page=2>; rel="next"`)
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"sha": "page1sha", "commit": map[string]interface{}{"message": "page1", "author": map[string]interface{}{"date": time.Now().Format(time.RFC3339)}}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"sha": "page2sha", "commit": map[string]interface{}{"message": "page2", "author": map[string]interface{}{"date": time.Now().Format(time.RFC3339)}}},
+		})
+	})
+	cli, srv := newMockGitHubClient(mux.ServeHTTP)
+	defer srv.Close()
+
+	a := &GitHubAdapter{
+		cfg: GitHubConfig{Token: "x", Owner: "o", Repo: "r", Since: time.Now().Add(-24 * time.Hour)},
+		cli: cli,
+	}
+	items, err := a.FetchCommits(context.Background())
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 commits across 2 pages, got %d", len(items))
+	}
+}
+
+func TestGitHubAdapter_FetchPullRequests_Paginates(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" || page == "1" {
+			w.Header().Set("Link", `<http://`+r.Host+`/repos/o/r/pulls?page=2>; rel="next"`)
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"number": 1, "title": "page1 pr", "state": "open", "html_url": "https://example/pr/1", "updated_at": time.Now().Format(time.RFC3339), "user": map[string]interface{}{"login": "alice"}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"number": 2, "title": "page2 pr", "state": "open", "html_url": "https://example/pr/2", "updated_at": time.Now().Format(time.RFC3339), "user": map[string]interface{}{"login": "bob"}},
+		})
+	})
+	cli, srv := newMockGitHubClient(mux.ServeHTTP)
+	defer srv.Close()
+
+	a := &GitHubAdapter{cfg: GitHubConfig{Token: "x", Owner: "o", Repo: "r"}, cli: cli}
+	items, err := a.FetchPullRequests(context.Background())
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 PRs across 2 pages, got %d", len(items))
+	}
+}
+
 // Compile-time check: GitHubAdapter satisfies the expected interface shape
 var _ interface {
 	Name() string

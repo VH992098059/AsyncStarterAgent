@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/asyncstarter/agent/internal/config"
+	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/asyncstarter/agent/internal/trigger"
 	"github.com/asyncstarter/agent/pkg/httpx"
 	"github.com/gin-gonic/gin"
@@ -21,12 +22,6 @@ type WebhookHandler struct {
 	Pool   *pgxpool.Pool  // 决策 #7: 查 feishu_tokens 表
 	Cfg    *config.Config // 决策 #7: 读 FeishuVerificationToken
 }
-
-// noRuleMatchedErr 是 trigger.Service 返回的"无匹配规则"错误 sentinel。
-// 与 internal/trigger/service.go:25 的 fmt.Errorf("no rule matched") 字符串保持一致。
-// webhook 场景下视为正常业务流（webhook 来了但不命中任何关键词），返回 200 + matched=false，
-// 避免外部 webhook 端因"业务不匹配"无限重试。
-const noRuleMatchedErr = "no rule matched"
 
 func (h *WebhookHandler) Todoist(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
@@ -64,15 +59,12 @@ func (h *WebhookHandler) Todoist(c *gin.Context) {
 			return
 		}
 		// T009 范围内 webhook payload 暂无 user 关联字段（Todoist payload 只有
-		// event_data.id 是 item id），用 uuid.Nil 占位。Phase 2+ 引入 user
-		// identity provider 后替换为真实 user_id。
+		// event_data.id 是 item id），用 uuid.Nil 占位表示 unowned run。Phase 2+ 引入 user
+		// identity provider 后替换为真实 user_id。ProcessKeyword 内部已不再返回
+		// "no rule matched"（无匹配时回退为 message 类型），故这里不再需要区分该错误。
+		log.Printf("[webhook] creating unowned AgentRun (user_id=uuid.Nil) for Todoist event_id=%s", ev.EventID)
 		uid := uuid.Nil
-		_, err := h.Svc.ProcessKeyword(c.Request.Context(), uid, content)
-		if err != nil {
-			if err.Error() == noRuleMatchedErr {
-				httpx.OK(c, gin.H{"received": true, "event_id": ev.EventID, "matched": false})
-				return
-			}
+		if _, err := h.Svc.ProcessKeyword(c.Request.Context(), uid, content); err != nil {
 			httpx.Fail(c, http.StatusInternalServerError, 5001, "create run")
 			return
 		}
@@ -127,7 +119,7 @@ func (h *WebhookHandler) HandleFeishuWebhook(c *gin.Context) {
 	eventType := payload.Header.EventType
 	switch eventType {
 	case "task.v2.task.created", "task.v2.task.updated":
-		h.handleFeishuTaskEvent(c, payload.Event)
+		h.handleFeishuTaskEvent(c, payload.Header.EventID, payload.Event)
 	default:
 		// 非任务事件，确认接收但不处理
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ignored"})
@@ -139,9 +131,9 @@ func (h *WebhookHandler) HandleFeishuWebhook(c *gin.Context) {
 // 若用户未授权过飞书（表里无此 open_id），事件被忽略（返回 200 + user not mapped），
 // 避免飞书端因业务不匹配无限重试。
 //
-// MVP 限制：未做 event_id 幂等去重，飞书重试可能创建重复 AgentRun。
-// 加固项：基于 event_id 的短期去重表（独立任务）。
-func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, event map[string]interface{}) {
+// eventID 幂等去重：基于 webhook_events 表（event_id 唯一约束），飞书重试推送同一
+// event_id 时第二次插入会因唯一约束冲突而失败，据此判断为重复事件并跳过创建 AgentRun。
+func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, eventID string, event map[string]interface{}) {
 	summary, _ := event["summary"].(string)
 	if summary == "" {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "no summary"})
@@ -162,11 +154,24 @@ func (h *WebhookHandler) handleFeishuTaskEvent(c *gin.Context, event map[string]
 		return
 	}
 
-	// Pool 未注入（server.New 误配置）时返回 503，避免 nil deref；
-	// 与下方 Svc == nil 检查对称。
 	if h.Pool == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db not configured"})
 		return
+	}
+
+	// eventID 缺失时无法去重，跳过检查直接放行（不阻断主流程，飞书 header.event_id 理论上总是存在）
+	if eventID != "" {
+		first, err := repository.TryInsertWebhookEvent(c.Request.Context(), h.Pool, "feishu", eventID)
+		if err != nil {
+			log.Printf("[feishu-webhook] dedup check failed for event_id=%s: %v", eventID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "dedup check failed"})
+			return
+		}
+		if !first {
+			// 重复事件（飞书重试），已处理过，直接返回成功避免继续重试
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "duplicate event, skipped"})
+			return
+		}
 	}
 
 	// 通过 open_id 查找系统用户（feishu_tokens 表的 open_id 字段，F001 已建）

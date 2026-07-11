@@ -6,7 +6,6 @@ require (
 	github.com/cloudwego/eino v0.9.9
 	github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260616080858-ab17b7308bf8
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.13
-	
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -22,6 +21,8 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.285.0
 )
+
+require github.com/redis/go-redis/v9 v9.14.1
 
 require (
 	cloud.google.com/go/auth v0.20.0 // indirect
@@ -71,7 +72,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
-	github.com/redis/go-redis/v9 v9.14.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/slongfield/pyfmt v0.0.0-20220222012616-ea85ff4c361f // indirect

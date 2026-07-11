@@ -77,11 +77,9 @@ func (p *Pipeline) Run(ctx context.Context, userID, agentRunID, dataSourceID str
 	// LLM-based filter
 	kept2, llmRejected := p.llmF.Apply(ctx, kept)
 
-	// Persist kept items
-	for _, it := range kept2 {
-		if err := p.sync.UpsertContextItem(ctx, it); err != nil {
-			log.Printf("[pipeline] upsert: %v", err)
-		}
+	// Persist kept items（问题 #12: 批量写入，避免逐条 Exec 的 N+1 网络往返）
+	if err := p.sync.UpsertContextItems(ctx, kept2); err != nil {
+		log.Printf("[pipeline] upsert: %v", err)
 	}
 
 	// Update sync timestamp

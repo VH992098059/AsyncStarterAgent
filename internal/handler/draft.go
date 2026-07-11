@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/asyncstarter/agent/internal/synthesis"
@@ -20,8 +21,13 @@ type DraftStreamHandler struct {
 
 // Stream 处理草稿流式响应：
 //   - 草稿已存在 → 重放（不改变 run 状态）
-//   - 草稿不存在 → 跑完整 GenerateDraftStream（service 层标 running/synthesis）
+//   - 草稿不存在 → 先尝试认领该 run（repository.ClaimRunForSynthesis，原子 UPDATE ...
+//     WHERE status='pending'）：
+//   - 认领成功 → 本请求负责生成，跑完整 GenerateDraftStream（实时 token 流式输出）
 //     成功 → handler 标 completed/synthesis；失败 → handler 标 failed/synthesis
+//   - 认领失败（已被 worker 认领，问题 #11：手动触发同时入队 asynq） → 说明后台
+//     worker 正在生成，本请求改为轮询等待草稿出现后重放（无实时 token，但避免
+//     重复调用一次 LLM）
 //
 // 状态回写失败不阻断流式响应，仅记日志。
 func (h *DraftStreamHandler) Stream(c *gin.Context) {
@@ -45,6 +51,25 @@ func (h *DraftStreamHandler) Stream(c *gin.Context) {
 	}
 
 	if !exists {
+		runUUID, parseErr := uuid.Parse(runID)
+		if parseErr != nil {
+			_ = a2ui.WriteError("invalid run id: " + parseErr.Error())
+			return
+		}
+		if h.Pool != nil {
+			claimed, claimErr := repository.ClaimRunForSynthesis(ctx, h.Pool, runUUID)
+			if claimErr != nil {
+				_ = a2ui.WriteError("claim run: " + claimErr.Error())
+				return
+			}
+			if !claimed {
+				// 已被后台 worker 认领（或早于本请求已在其他地方生成中），
+				// 轮询等待草稿出现后重放，避免重复调用 LLM。
+				h.waitAndReplay(ctx, runID, a2ui)
+				return
+			}
+		}
+
 		var userID, taskType string
 		if err = h.Svc.QueryRunInfo(ctx, runID, &userID, &taskType); err != nil {
 			_ = a2ui.WriteError("run not found: " + err.Error())
@@ -60,6 +85,41 @@ func (h *DraftStreamHandler) Stream(c *gin.Context) {
 
 	if err := h.Svc.StreamDraft(ctx, runID, a2ui); err != nil {
 		_ = a2ui.WriteError(err.Error())
+	}
+}
+
+// waitAndReplay 轮询等待草稿出现（后台 worker 正在生成中），出现后重放；
+// 超时（60s）或 run 转为 failed 则报错退出。
+func (h *DraftStreamHandler) waitAndReplay(ctx context.Context, runID string, a2ui *synthesis.A2UIWriter) {
+	const (
+		pollInterval = 500 * time.Millisecond
+		timeout      = 60 * time.Second
+	)
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		exists, err := h.Svc.DraftExists(ctx, runID)
+		if err != nil {
+			_ = a2ui.WriteError("check draft: " + err.Error())
+			return
+		}
+		if exists {
+			if err := h.Svc.StreamDraft(ctx, runID, a2ui); err != nil {
+				_ = a2ui.WriteError(err.Error())
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			_ = a2ui.WriteError("draft generation timed out, please retry later")
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

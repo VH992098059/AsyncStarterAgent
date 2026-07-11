@@ -16,7 +16,7 @@ import (
 func newTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{Env: "development"}
-	return server.New(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	return server.New(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 func TestCORS_Preflight_RegisterEndpoint(t *testing.T) {

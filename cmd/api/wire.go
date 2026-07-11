@@ -11,6 +11,7 @@ import (
 	"github.com/asyncstarter/agent/internal/feishu"
 	"github.com/asyncstarter/agent/internal/handler"
 	"github.com/asyncstarter/agent/internal/queue"
+	"github.com/asyncstarter/agent/internal/ratelimit"
 	"github.com/asyncstarter/agent/internal/repository"
 	"github.com/asyncstarter/agent/internal/server"
 	"github.com/asyncstarter/agent/internal/settings"
@@ -31,12 +32,13 @@ type Deps struct {
 	Deliv             *delivery.Service
 	Auth              *auth.Service
 	AuthMgr           *auth.Manager
-	AuthBL            *auth.Blacklist
+	AuthBL            auth.BlacklistStore
 	Matcher           *trigger.Matcher
 	SettingsRepo      *settings.Repo
 	SettingsFactory   *settings.Factory
 	FeishuFactory     *feishu.ClientFactory
 	FeishuAuthHandler *handler.FeishuAuthHandler
+	LoginLimiter      *ratelimit.Limiter
 }
 
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
@@ -55,7 +57,17 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	trigSvc := trigger.NewService(pool, matcher)
 
 	jwtMgr := auth.NewManager(cfg.JWTSecret, 7*24*time.Hour)
-	authBL := auth.NewBlacklist()
+	// 问题 #9: JWT 黑名单迁移到 Redis（替代内存实现），解决重启丢失/多实例不共享问题。
+	// NewRedisBlacklist 仅在 redisURL 为空/不可解析时报错（不会因 Redis 暂不可达而失败，
+	// 客户端是惰性连接的），失败时回退到内存黑名单以保证服务仍可启动（如本地无 Redis 的开发环境）。
+	var authBL auth.BlacklistStore
+	if redisBL, err := auth.NewRedisBlacklist(cfg.RedisURL); err != nil {
+		log.Printf("[auth] redis blacklist init failed, falling back to in-memory (won't survive restart/multi-instance): %v", err)
+		authBL = auth.NewBlacklist()
+	} else {
+		authBL = redisBL
+		log.Println("[auth] blacklist backed by redis")
+	}
 	authSvc := auth.NewService(pool, bcrypt.DefaultCost)
 	if jwtMgr == nil {
 		log.Println("[auth] JWT_SECRET empty, /api/v1/auth/* disabled")
@@ -113,6 +125,13 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 
 	log.Println("[ddl] scheduler started")
 
+	// 问题 #8: 登录接口限流（按用户名维度，5 次/分钟）。Redis 不可达时 Login 内部 fail-open。
+	loginLimiter, err := ratelimit.NewLimiter(cfg.RedisURL, 5, time.Minute)
+	if err != nil {
+		log.Printf("[ratelimit] disabled (login limiter init failed): %v", err)
+		loginLimiter = nil
+	}
+
 	return &Deps{
 		Cfg:               cfg,
 		Pool:              pool,
@@ -128,9 +147,10 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		SettingsFactory:   settingsFactory,
 		FeishuFactory:     feishuFactory,
 		FeishuAuthHandler: feishuAuthHandler,
+		LoginLimiter:      loginLimiter,
 	}, nil
 }
 
 func (d *Deps) Server() *gin.Engine {
-	return server.New(d.Cfg, d.Pool, d.Trigger, d.Syn, d.Deliv, d.Auth, d.AuthMgr, d.AuthBL, d.Matcher, d.SettingsRepo, d.SettingsFactory, d.FeishuAuthHandler)
+	return server.New(d.Cfg, d.Pool, d.Trigger, d.Syn, d.Deliv, d.Auth, d.AuthMgr, d.AuthBL, d.Matcher, d.SettingsRepo, d.SettingsFactory, d.FeishuAuthHandler, d.LoginLimiter, d.Queue)
 }

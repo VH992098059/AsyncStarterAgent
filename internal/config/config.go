@@ -47,6 +47,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required in production")
 	}
 
+	feishuAppID := getEnv("FEISHU_APP_ID", "")
+	feishuAppSecret := getEnv("FEISHU_APP_SECRET", "")
+	dbEncryptionKey := getEnv("DB_ENCRYPTION_KEY", "")
+	if feishuAppID != "" && feishuAppSecret != "" && dbEncryptionKey == "" {
+		return nil, fmt.Errorf("DB_ENCRYPTION_KEY is required when FEISHU_APP_ID/FEISHU_APP_SECRET are set")
+	}
+
 	return &Config{
 		Env:                     env,
 		Port:                    port,
@@ -63,11 +70,11 @@ func Load() (*Config, error) {
 		ObsidianVaultPath:       getEnv("OBSIDIAN_VAULT_PATH", ""),
 		NotionAPIKey:            getEnv("NOTION_API_KEY", ""),
 		NotionParentPageID:      getEnv("NOTION_PARENT_PAGE_ID", ""),
-		FeishuAppID:             getEnv("FEISHU_APP_ID", ""),
-		FeishuAppSecret:         getEnv("FEISHU_APP_SECRET", ""),
+		FeishuAppID:             feishuAppID,
+		FeishuAppSecret:         feishuAppSecret,
 		FeishuRedirectURL:       getEnv("FEISHU_REDIRECT_URL", "http://localhost:8080/api/v1/auth/feishu/callback"),
 		FeishuVerificationToken: getEnv("FEISHU_VERIFICATION_TOKEN", ""),
-		DBEncryptionKey:         getEnv("DB_ENCRYPTION_KEY", ""),
+		DBEncryptionKey:         dbEncryptionKey,
 	}, nil
 }
 

@@ -183,3 +183,108 @@ func TestClientFactory_IsAuthorized_ExpiredToken(t *testing.T) {
 		t.Error("expired token should still count as authorized (refresh may recover)")
 	}
 }
+
+// TestClientFactory_ConcurrentRefresh_WaitsForCompletion 验证并发刷新时，等待方会
+// 阻塞到刷新真正完成（channel 关闭）才重读 store，而不是命中固定 sleep 后可能读到旧值。
+// 回归 #5：mock HTTP 耗时 300ms（远超旧实现的 200ms 固定等待），若仍用旧的 sleep 方案，
+// 等待方会在刷新完成前读到 store 中仍是过期的旧 token。
+func TestClientFactory_ConcurrentRefresh_WaitsForCompletion(t *testing.T) {
+	store := newMemTokenStore()
+	uid := uuid.New()
+	_ = store.Save(context.Background(), TokenRecord{
+		UserID:       uid,
+		AccessToken:  "u-old",
+		RefreshToken: "ur-old",
+		ExpiresAt:    time.Now().Add(-1 * time.Minute), // 已过期
+	})
+
+	doer := &mockHTTPDoer{
+		delay: 300 * time.Millisecond,
+		respBody: `{
+			"code": 0,
+			"msg": "ok",
+			"data": {
+				"access_token": "u-new",
+				"refresh_token": "ur-new",
+				"expires_in": 7200
+			}
+		}`,
+	}
+	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
+	factory := NewClientFactory("x", "y", store, auth)
+
+	results := make(chan string, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, token, err := factory.GetClient(context.Background(), uid)
+			if err != nil {
+				results <- "error: " + err.Error()
+				return
+			}
+			results <- token
+		}()
+	}
+
+	for i := 0; i < 2; i++ {
+		token := <-results
+		if token != "u-new" {
+			t.Errorf("expected both concurrent callers to see refreshed token u-new, got %q", token)
+		}
+	}
+}
+
+// TestClientFactory_RevokeDuringRefresh_DoesNotResurrect 验证撤销与并发刷新竞争时，
+// 刷新完成后不会把已撤销的授权重新写回 store（防止撤销被"复活"）。
+// 回归 #6：Revoke 在 refreshToken 进行中调用，refreshToken 完成后应放弃 store.Save。
+func TestClientFactory_RevokeDuringRefresh_DoesNotResurrect(t *testing.T) {
+	store := newMemTokenStore()
+	uid := uuid.New()
+	_ = store.Save(context.Background(), TokenRecord{
+		UserID:       uid,
+		AccessToken:  "u-old",
+		RefreshToken: "ur-old",
+		ExpiresAt:    time.Now().Add(-1 * time.Minute), // 已过期
+	})
+
+	doer := &mockHTTPDoer{
+		delay: 200 * time.Millisecond,
+		respBody: `{
+			"code": 0,
+			"msg": "ok",
+			"data": {
+				"access_token": "u-new",
+				"refresh_token": "ur-new",
+				"expires_in": 7200
+			}
+		}`,
+	}
+	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
+	factory := NewClientFactory("x", "y", store, auth)
+
+	refreshDone := make(chan struct{})
+	go func() {
+		defer close(refreshDone)
+		_, _, _ = factory.GetClient(context.Background(), uid)
+	}()
+
+	// 等待刷新真正开始（进入 f.refresh map）后再撤销，确保命中竞态窗口
+	for {
+		factory.mu.Lock()
+		_, ongoing := factory.refresh[uid]
+		factory.mu.Unlock()
+		if ongoing {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if err := factory.Revoke(context.Background(), uid); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	<-refreshDone
+
+	if factory.IsAuthorized(context.Background(), uid) {
+		t.Error("revoked token should not be resurrected by in-flight refresh completing afterward")
+	}
+}

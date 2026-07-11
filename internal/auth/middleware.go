@@ -19,7 +19,7 @@ const (
 // Middleware 校验 Authorization: Bearer <token>，把 user_id 注入 gin.Context。
 // 也接受 ?token= 形式（仅用于 SSE，EventSource 不支持自定义 Header）。
 // 401 场景：缺失/格式错/签名错/过期/在黑名单。
-func Middleware(mgr *Manager, bl *Blacklist) gin.HandlerFunc {
+func Middleware(mgr *Manager, bl BlacklistStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tok := extractToken(c)
 		if tok == "" {

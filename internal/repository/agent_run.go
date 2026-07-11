@@ -58,6 +58,23 @@ func GetAgentRunByID(ctx context.Context, pool *pgxpool.Pool, userID, id uuid.UU
 // ErrRunNotOwned 表示 AgentRun 不属于当前 userID。
 var ErrRunNotOwned = fmt.Errorf("agent run not owned by user")
 
+// ClaimRunForSynthesis 原子性地"认领"一个 pending 状态的 AgentRun 用于草稿生成。
+// 用于解决问题 #11：手动触发同时入队 asynq worker + 前端立即打开 SSE stream 端点，
+// 两者都可能尝试生成同一份草稿，浪费一倍 LLM 调用成本。
+// 通过 UPDATE ... WHERE status='pending' 的原子性，只有一方能把 status 改成
+// running/synthesis（affected rows=1，返回 true），另一方看到 affected rows=0
+// （返回 false）应放弃生成，等待草稿出现后 replay。
+func ClaimRunForSynthesis(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (bool, error) {
+	const q = `UPDATE agent_runs
+	           SET status = 'running', current_stage = 'synthesis', updated_at = NOW()
+	           WHERE id = $1 AND status = 'pending'`
+	tag, err := pool.Exec(ctx, q, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // UpdateAgentRunStatus 更新 AgentRun 的 status / current_stage，并按需回写 error_message / completed_at。
 // status 取值：pending / running / completed / failed / cancelled。
 // currentStage 取值：ingestion / harvesting / synthesis / delivery。

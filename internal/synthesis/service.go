@@ -91,6 +91,50 @@ func (s *Service) GenerateDraft(ctx context.Context, runID, userID string, taskT
 	return result, nil
 }
 
+// GenerateDraftAsync 是 worker 端调用的非流式草稿生成入口（问题 #11：asynq 接入实际触发路径）。
+// 先用 ClaimRunForSynthesis 原子性认领 run（status: pending → running/synthesis）；
+// 若认领失败（affected rows=0，说明 DraftStreamHandler.Stream 的同步兜底已经在处理这个 run，
+// 或 run 已不是 pending 状态），直接返回 nil，不重复调用 LLM。
+// 认领成功后调用 GenerateDraft（内部会再次执行 wf.generate，允许失败重试——asynq 默认
+// MaxRetry(3)，多次重试不会重复认领，因为 run 状态已经是 running 不再是 pending，
+// 但重试仍需要重新生成，故这里认领检查只做首次拦截，不阻止 asynq 自身的重试机制）。
+func (s *Service) GenerateDraftAsync(ctx context.Context, runID string) error {
+	runUUID, err := uuid.Parse(runID)
+	if err != nil {
+		return fmt.Errorf("invalid run id: %w", err)
+	}
+	if s.pool == nil {
+		return fmt.Errorf("pool not configured")
+	}
+
+	claimed, err := repository.ClaimRunForSynthesis(ctx, s.pool, runUUID)
+	if err != nil {
+		return fmt.Errorf("claim run: %w", err)
+	}
+	if !claimed {
+		log.Printf("[synthesis] run %s already claimed (not pending), skip", runID)
+		return nil
+	}
+
+	var userID, taskType string
+	if err := s.QueryRunInfo(ctx, runID, &userID, &taskType); err != nil {
+		_ = repository.UpdateAgentRunStatus(ctx, s.pool, runUUID, "failed", "synthesis", err.Error())
+		return fmt.Errorf("query run info: %w", err)
+	}
+
+	if _, err := s.GenerateDraft(ctx, runID, userID, taskType); err != nil {
+		if updErr := repository.UpdateAgentRunStatus(ctx, s.pool, runUUID, "failed", "synthesis", err.Error()); updErr != nil {
+			log.Printf("[synthesis] update run status to failed/synthesis: %v", updErr)
+		}
+		return fmt.Errorf("generate draft: %w", err)
+	}
+
+	if err := repository.UpdateAgentRunStatus(ctx, s.pool, runUUID, "completed", "synthesis", ""); err != nil {
+		log.Printf("[synthesis] update run status to completed/synthesis: %v", err)
+	}
+	return nil
+}
+
 func (s *Service) DraftExists(ctx context.Context, runID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,

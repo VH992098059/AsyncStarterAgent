@@ -24,7 +24,8 @@ type ClientFactory struct {
 	client *lark.Client
 
 	mu      sync.Mutex
-	refresh map[uuid.UUID]struct{} // 正在刷新的用户集合，防止并发刷新
+	refresh map[uuid.UUID]chan struct{} // 正在刷新的用户 → 刷新完成时关闭的 channel，用于阻塞等待而非固定 sleep
+	revoked map[uuid.UUID]struct{}      // 在刷新进行中被撤销的用户，refreshToken 完成时据此放弃写回，防止撤销被复活
 }
 
 func NewClientFactory(appID, appSecret string, store TokenStore, authClient *AuthClient) *ClientFactory {
@@ -34,7 +35,8 @@ func NewClientFactory(appID, appSecret string, store TokenStore, authClient *Aut
 		store:      store,
 		authClient: authClient,
 		client:     lark.NewClient(appID, appSecret),
-		refresh:    make(map[uuid.UUID]struct{}),
+		refresh:    make(map[uuid.UUID]chan struct{}),
+		revoked:    make(map[uuid.UUID]struct{}),
 	}
 }
 
@@ -83,36 +85,39 @@ func (f *ClientFactory) GetClient(ctx context.Context, userID uuid.UUID) (*lark.
 }
 
 // refreshToken 用 refresh_token 刷新并存储
-// 使用 mutex 防止同一用户并发刷新
+// 使用 mutex + per-user channel 防止同一用户并发刷新：并发调用会阻塞等待刷新协程
+// 真正完成（channel 关闭）后再重读 store，而不是猜测一个固定 sleep 时长。
 func (f *ClientFactory) refreshToken(ctx context.Context, userID uuid.UUID, refreshToken string) (*TokenRecord, error) {
 	f.mu.Lock()
-	if _, ongoing := f.refresh[userID]; ongoing {
-		// 已有刷新在进行，等待释放后重读
+	if done, ongoing := f.refresh[userID]; ongoing {
+		// 已有刷新在进行，阻塞等待其 channel 关闭（真正完成）后再重读
 		f.mu.Unlock()
-		// MVP 简化：等待 200ms 后重读 store。
-		// 已知限制：若并发刷新尚未完成，此处可能读到旧的（仍过期的）access_token，
-		// 调用方请求时会收到 401。V1.5 可改为 condition variable / channel 等待刷新完成。
 		select {
-		case <-time.After(200 * time.Millisecond):
+		case <-done:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 		rec, err := f.store.Get(ctx, userID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				// 并发刷新失败并删除了 token → 视为未授权
+				// 并发刷新失败（或被撤销）删除了 token → 视为未授权
 				return nil, &ErrNotAuthorized{UserID: userID}
 			}
 			return nil, fmt.Errorf("feishu: get token after refresh wait: %w", err)
 		}
 		return rec, nil
 	}
-	f.refresh[userID] = struct{}{}
+	done := make(chan struct{})
+	f.refresh[userID] = done
 	f.mu.Unlock()
 
 	defer func() {
 		f.mu.Lock()
 		delete(f.refresh, userID)
+		// 无论本次是否被撤销，撤销标记只对"当前这次"刷新有效，用完即清，
+		// 避免残留污染同一 userID 下一次独立的刷新。
+		delete(f.revoked, userID)
+		close(done)
 		f.mu.Unlock()
 	}()
 
@@ -124,7 +129,18 @@ func (f *ClientFactory) refreshToken(ctx context.Context, userID uuid.UUID, refr
 	}
 
 	rec := tr.ToTokenRecord(userID)
-	if err := f.store.Save(ctx, rec); err != nil {
+
+	// 在同一把锁内完成"撤销检查 + 写回"，与 Revoke 的撤销标记/删除操作互斥，
+	// 避免 Revoke 发生在刷新进行中时，刷新完成后把已撤销的授权重新写回（"复活"）。
+	f.mu.Lock()
+	if _, revoked := f.revoked[userID]; revoked {
+		delete(f.revoked, userID)
+		f.mu.Unlock()
+		return nil, &ErrNotAuthorized{UserID: userID}
+	}
+	err = f.store.Save(ctx, rec)
+	f.mu.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("feishu: save refreshed token: %w", err)
 	}
 	return &rec, nil
@@ -137,9 +153,14 @@ func (f *ClientFactory) IsAuthorized(ctx context.Context, userID uuid.UUID) bool
 	return err == nil
 }
 
-// Revoke 撤销授权（删除 token）
-// 已知限制（MVP）：若撤销时仍有刷新在进行，刷新可能在此之后调用 store.Save 重新写入
-// token，导致撤销被覆盖。V1.5 可通过取消 in-flight context 解决。
+// Revoke 撤销授权（删除 token）。若此时有并发的 refreshToken 正在进行，
+// 在 refresh map 中标记该用户为"已撤销"：refreshToken 完成时会在同一把锁内
+// 检查此标记，若已撤销则放弃 store.Save，防止撤销被刷新完成时悄悄覆盖（复活）。
 func (f *ClientFactory) Revoke(ctx context.Context, userID uuid.UUID) error {
+	f.mu.Lock()
+	if _, ongoing := f.refresh[userID]; ongoing {
+		f.revoked[userID] = struct{}{}
+	}
+	f.mu.Unlock()
 	return f.store.Delete(ctx, userID)
 }

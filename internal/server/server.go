@@ -8,6 +8,8 @@ import (
 	"github.com/asyncstarter/agent/internal/delivery"
 	"github.com/asyncstarter/agent/internal/handler"
 	"github.com/asyncstarter/agent/internal/middleware"
+	"github.com/asyncstarter/agent/internal/queue"
+	"github.com/asyncstarter/agent/internal/ratelimit"
 	"github.com/asyncstarter/agent/internal/settings"
 	"github.com/asyncstarter/agent/internal/synthesis"
 	"github.com/asyncstarter/agent/internal/trigger"
@@ -44,16 +46,20 @@ func New(
 	delivSvc *delivery.Service,
 	authSvc *auth.Service,
 	authMgr *auth.Manager,
-	authBL *auth.Blacklist,
+	authBL auth.BlacklistStore,
 	matcher *trigger.Matcher,
 	settingsRepo *settings.Repo,
 	settingsFactory *settings.Factory,
 	feishuAuthHandler *handler.FeishuAuthHandler,
+	loginLimiter *ratelimit.Limiter,
+	queueClient *queue.Client,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(middleware.Recovery())
 	r.Use(middleware.Logger())
+	// 问题 #10: 全局请求体大小限制，防止巨大 body（如 draft markdown）占用大量内存/DB 带宽
+	r.Use(middleware.MaxBodyBytes(5 << 20)) // 5 MiB
 
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc:  allowOrigin,
@@ -72,10 +78,11 @@ func New(
 	r.GET("/health", handler.Health)
 
 	ah := &handler.AuthHandler{
-		Svc: authSvc,
-		Mgr: authMgr,
-		BL:  authBL,
-		TTL: 7 * 24 * time.Hour,
+		Svc:          authSvc,
+		Mgr:          authMgr,
+		BL:           authBL,
+		TTL:          7 * 24 * time.Hour,
+		LoginLimiter: loginLimiter, // 问题 #8: 按用户名限流登录尝试，防暴力破解
 	}
 	r.POST("/api/v1/auth/register", ah.Register)
 	r.POST("/api/v1/auth/login", ah.Login)
@@ -98,7 +105,7 @@ func New(
 	r.GET("/api/v1/datasources", authMW, lh.GetDataSources)
 	r.GET("/api/v1/agent-runs", authMW, lh.GetAgentRuns)
 
-	th := &handler.TriggerHandler{Svc: trigSvc}
+	th := &handler.TriggerHandler{Svc: trigSvc, Queue: queueClient} // 问题 #11: 异步入队草稿生成
 	r.POST("/api/v1/trigger", authMW, th.ManualTrigger)
 
 	dh := &handler.DraftStreamHandler{Svc: synthSvc, Pool: pool}
