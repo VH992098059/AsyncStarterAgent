@@ -21,8 +21,8 @@
   --border-subtle: rgba(0, 0, 0, 0.06);
   --border-default: rgba(0, 0, 0, 0.08);
   --text-primary: #18181b;
-  --text-secondary: #52525b;
-  --text-muted: #a1a1aa;
+  --text-secondary: #3f3f46;
+  --text-muted: #71717a;
 }
 
 html.dark {
@@ -289,41 +289,6 @@ input:focus, textarea:focus, select:focus {
   color: var(--text-primary);
 }
 
-/* Tiptap editor styles */
-.tiptap {
-  outline: none;
-  min-height: 400px;
-}
-.tiptap p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  color: var(--text-muted);
-  pointer-events: none;
-  height: 0;
-}
-.tiptap h1 { font-size: 1.25rem; font-weight: 700; margin: 1em 0 0.5em; color: var(--text-primary); }
-.tiptap h2 { font-size: 1.1rem; font-weight: 600; margin: 0.8em 0 0.4em; color: var(--text-primary); }
-.tiptap h3 { font-size: 1rem; font-weight: 600; margin: 0.6em 0 0.3em; color: var(--text-primary); }
-.tiptap p { margin: 0.5em 0; }
-.tiptap ul { list-style: disc; padding-left: 1.5em; margin: 0.5em 0; }
-.tiptap ol { list-style: decimal; padding-left: 1.5em; margin: 0.5em 0; }
-.tiptap li { margin: 0.2em 0; }
-.tiptap strong { font-weight: 600; }
-.tiptap em { font-style: italic; }
-.tiptap .mark-pending {
-  border-bottom: 2px dashed #f59e0b;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.tiptap .mark-pending:hover {
-  background: rgba(245, 158, 11, 0.1);
-}
-
-/* Mobile tiptap override */
-.tiptap-mobile-editor .tiptap {
-  min-height: 300px;
-}
-
 /* Page title */
 .page-title {
   font-size: 1.5rem;
@@ -342,6 +307,52 @@ input:focus, textarea:focus, select:focus {
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin-top: 0.375rem;
+}
+
+/* Breadcrumb - 工作流页顶部导航 */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.breadcrumb-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.15s var(--ease-out-expo);
+  font-size: inherit;
+}
+.breadcrumb-link:hover {
+  color: var(--emerald);
+  background: var(--emerald-soft);
+}
+.breadcrumb-link:active {
+  transform: scale(0.96);
+}
+.breadcrumb-sep {
+  color: var(--text-muted);
+  opacity: 0.6;
+  user-select: none;
+}
+.breadcrumb-current {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.breadcrumb-run-id {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--emerald);
+  background: var(--emerald-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
 }
 
 /* Section heading - client app style */
@@ -987,12 +998,68 @@ input:focus, textarea:focus, select:focus {
 .kanban-card:hover {
   background: var(--bg-elevated);
   border-color: rgba(16, 185, 129, 0.2);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -8px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.15);
 }
 
 .kanban-card.selected {
   border-color: rgba(16, 185, 129, 0.4);
   background: rgba(16, 185, 129, 0.06);
+}
+
+.kanban-card.failed {
+  border-left: 3px solid rgba(239, 68, 68, 0.6);
+}
+
+.kanban-card-tag.failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.kanban-empty-column {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.kanban-error-banner {
+  grid-column: 1 / -1;
+  padding: 16px 20px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kanban-error-text {
+  font-size: 13px;
+  color: #f87171;
+  word-break: break-all;
+}
+
+.kanban-error-retry {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: transparent;
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out-expo);
+}
+
+.kanban-error-retry:hover {
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .kanban-card-title {
@@ -1023,6 +1090,224 @@ input:focus, textarea:focus, select:focus {
 .kanban-card-tag.report { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 .kanban-card-tag.message { background: rgba(16, 185, 129, 0.15); color: #34d399; }
 
+/* ========== Kanban 阶段2：卡片菜单按钮 + skeleton + filter dropdown + load more ========== */
+
+/* 卡片三点菜单按钮：默认隐藏，hover 卡片时显示 */
+.kanban-card {
+  position: relative;
+}
+.kanban-card-menu-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out-expo), background 0.15s var(--ease-out-expo);
+}
+.kanban-card:hover .kanban-card-menu-btn {
+  opacity: 1;
+}
+.kanban-card-menu-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* Skeleton shimmer 占位卡 */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.kanban-card.skeleton {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  cursor: default;
+  pointer-events: none;
+}
+.kanban-card.skeleton:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border-subtle);
+  background: var(--bg-tertiary);
+}
+.kanban-card-skeleton-title,
+.kanban-card-skeleton-meta {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--border-subtle) 0%,
+    var(--border-default) 50%,
+    var(--border-subtle) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.kanban-card-skeleton-title {
+  width: 70%;
+  margin-bottom: 10px;
+}
+.kanban-card-skeleton-meta {
+  width: 45%;
+  height: 10px;
+}
+
+/* Filter dropdown */
+.kanban-filter-wrapper {
+  position: relative;
+}
+.kanban-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  animation: dropdownSlideIn 0.15s var(--ease-out-expo) forwards;
+}
+.kanban-filter-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out-expo), color 0.12s var(--ease-out-expo);
+}
+.kanban-filter-option:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.kanban-filter-option.active {
+  background: var(--emerald-soft);
+  color: var(--emerald);
+  font-weight: 500;
+}
+
+/* 加载更多按钮 */
+.kanban-load-more {
+  margin-top: 8px;
+  padding: 8px 12px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px dashed var(--border-default);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out-expo);
+}
+.kanban-load-more:hover:not(:disabled) {
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--emerald);
+  background: var(--emerald-soft);
+}
+.kanban-load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========== CardMenu 卡片操作菜单 ========== */
+.card-menu {
+  min-width: 180px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  z-index: 200;
+}
+.card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out-expo), color 0.12s var(--ease-out-expo);
+}
+.card-menu-item:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.card-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.card-menu-item.danger {
+  color: #f87171;
+}
+.card-menu-item.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+.card-menu-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 0;
+}
+.card-menu-confirm {
+  padding: 8px 10px;
+}
+.card-menu-confirm-text {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.card-menu-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+.card-menu-confirm-yes,
+.card-menu-confirm-no {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-default);
+  transition: all 0.12s var(--ease-out-expo);
+}
+.card-menu-confirm-yes {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+.card-menu-confirm-yes:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+.card-menu-confirm-no {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+.card-menu-confirm-no:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 /* Page Content - for non-kanban pages */
 .page-content {
   flex: 1;
@@ -1049,6 +1334,58 @@ input:focus, textarea:focus, select:focus {
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-default);
   overflow: hidden;
+}
+
+/* assistant-ui Thread 组件 */
+.chat-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* assistant-ui Thread Viewport */
+.chat-thread [data-aui-thread-viewport] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* assistant-ui Message 组件 */
+.chat-thread [data-aui-message] {
+  display: flex;
+  gap: 10px;
+  max-width: 85%;
+}
+
+.chat-thread [data-aui-message][data-role="assistant"] {
+  align-self: flex-start;
+}
+
+.chat-thread [data-aui-message][data-role="user"] {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+/* assistant-ui Composer 组件 */
+.chat-input-wrapper [data-aui-composer-input] {
+  flex: 1;
+  background: transparent;
+  border: none !important;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  max-height: 120px;
+  min-height: 20px;
+  padding: 2px 0;
+  font-family: inherit;
+  box-shadow: none !important;
 }
 
 .chat-open .chat-area {
@@ -1179,7 +1516,7 @@ input:focus, textarea:focus, select:focus {
 
 .chat-input-wrapper {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-subtle);
@@ -1236,6 +1573,225 @@ input:focus, textarea:focus, select:focus {
 .chat-send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Stop button (header) - shown only while streaming */
+.chat-stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out-expo);
+  flex-shrink: 0;
+}
+.chat-stop-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+.chat-stop-btn:active {
+  transform: scale(0.96);
+}
+
+/* Send button replaced by stop (red) while streaming */
+.chat-send-btn-stop {
+  background: #ef4444;
+}
+.chat-send-btn-stop:hover {
+  background: #dc2626;
+}
+
+/* chat-bubble-wrap: 包裹 bubble + 重试按钮 */
+.chat-bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Error bubble - 红色边框/背景 */
+.chat-bubble-error {
+  background: rgba(239, 68, 68, 0.06) !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  color: #ef4444;
+}
+
+/* Streaming 三点动画（bubble 内部，content 为空时显示） */
+.chat-bubble-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+}
+.chat-bubble-loading span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: chatDotPulse 1.2s ease-in-out infinite;
+}
+.chat-bubble-loading span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-bubble-loading span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes chatDotPulse {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.85); }
+  30% { opacity: 1; transform: scale(1); }
+}
+
+/* Retry button - 失败消息下方 */
+.chat-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out-expo);
+}
+.chat-retry-btn:hover:not(:disabled) {
+  background: var(--emerald-soft);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--emerald);
+}
+.chat-retry-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.chat-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Reasoning content (DeepSeek thinking) - 可折叠 */
+.chat-reasoning {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  margin: 0 -14px 8px -14px;
+  border-left: 2px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.04);
+  border-radius: 0 8px 8px 0;
+  line-height: 1.5;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+.chat-reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+.chat-reasoning-toggle:hover {
+  color: var(--emerald);
+}
+.chat-reasoning-label {
+  font-style: normal;
+}
+.chat-reasoning-arrow {
+  font-size: 0.625rem;
+  transition: transform 0.2s var(--ease-out-expo);
+  display: inline-block;
+}
+.chat-reasoning-arrow.expanded {
+  transform: rotate(180deg);
+}
+.chat-reasoning-content {
+  margin-top: 6px;
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-reasoning-content > * {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Input textarea - 去除默认边框，避免双重边框 */
+.chat-input-wrapper textarea,
+.chat-input-wrapper [data-aui-composer-input] {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Initial history loading - 居中三点 + 文案 */
+.chat-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  margin: auto 0;
+}
+.chat-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.chat-loading-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--emerald);
+  animation: chatDotPulse 1.2s ease-in-out infinite;
+}
+.chat-loading-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-loading-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.chat-loading-text {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* Empty state - 无消息时占位 */
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 48px 24px;
+  margin: auto 0;
+  text-align: center;
+}
+.chat-empty-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.chat-empty-text {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 280px;
 }
 
 /* Hamburger menu button */
@@ -1394,5 +1950,38 @@ input:focus, textarea:focus, select:focus {
   .mobile-bottom-nav-item svg {
     width: 22px;
     height: 22px;
+  }
+}
+
+/* ========== 无障碍：尊重 prefers-reduced-motion ==========
+ * 用户开启"减少动态效果"时，只禁用可能引发眩晕的大幅动画
+ * （卡片上移、无限循环动画、平滑滚动），保留温和的颜色/透明度
+ * 过渡，避免界面变得完全死板。
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+  /* 卡片 hover 不上移（避免大幅位移引发眩晕） */
+  .kanban-card:hover,
+  .kanban-card.card-lift:hover,
+  .app-card.card-lift:hover,
+  .glass-card.card-lift:hover {
+    transform: none !important;
+  }
+  /* 无限循环动画停止（进度条流动、光标闪烁、状态脉冲、loading 三点） */
+  .progress-gradient,
+  .typing-cursor::after,
+  .status-pulse,
+  .chat-bubble-loading span,
+  .chat-loading-dots span {
+    animation: none !important;
+  }
+  /* 入场动画改为瞬时显示（保留可见性，不做位移） */
+  .page-transition,
+  .animate-fade-in-up,
+  .stagger-list > * {
+    animation: none !important;
+    opacity: 1 !important;
   }
 }

@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { deliverDraft, type Draft } from "../api/client";
+import { Breadcrumb } from "./Breadcrumb";
+import type { PageKey } from "./Layout";
 import { useRipple } from "../hooks/useRipple";
 
 interface DeliveryProps {
   draft: Draft;
   runId: string | null;
-  onNavigate: (page: number) => void;
+  onNavigate: (page: PageKey) => void;
 }
 
 export function Delivery({ draft, runId, onNavigate }: DeliveryProps) {
   const [selectedTarget, setSelectedTarget] = useState<"notion" | "obsidian" | null>(null);
   const [delivering, setDelivering] = useState(false);
-  const [deliverResult, setDeliverResult] = useState<{ status: string; target_url?: string } | null>(null);
+  const [deliverResult, setDeliverResult] = useState<{ status: string; target_url?: string; error_message?: string } | null>(null);
   const ripple = useRipple();
 
   const handleDeliver = async () => {
@@ -21,7 +23,11 @@ export function Delivery({ draft, runId, onNavigate }: DeliveryProps) {
       const result = await deliverDraft(runId, selectedTarget);
       setDeliverResult({ status: result.status, target_url: result.target_url });
     } catch (err) {
-      setDeliverResult({ status: "failed" });
+      setDeliverResult({
+        status: "failed",
+        target_url: undefined,
+        error_message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setDelivering(false);
     }
@@ -44,6 +50,7 @@ export function Delivery({ draft, runId, onNavigate }: DeliveryProps) {
 
   return (
     <div className="pb-28 md:pb-24">
+      <Breadcrumb title="交付通知" runId={runId} onBackToBoard={() => onNavigate("board")} />
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">交付通知</h1>
         <p className="text-zinc-500 text-sm mt-1.5">选择交付目标并确认发送</p>
@@ -56,7 +63,7 @@ export function Delivery({ draft, runId, onNavigate }: DeliveryProps) {
           </div>
           <div className="text-zinc-400 text-sm mb-5">暂无可交付的草稿</div>
           <button
-            onClick={() => onNavigate(4)}
+            onClick={() => onNavigate("draft")}
             className="px-6 py-3 rounded-xl bg-emerald-500 text-white text-sm font-medium btn-press hover:bg-emerald-400 transition-colors"
           >
             前往编辑草稿
@@ -133,9 +140,14 @@ export function Delivery({ draft, runId, onNavigate }: DeliveryProps) {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8.5"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/></svg>
-                  <span className="text-sm text-red-400 font-medium">交付失败，请重试</span>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8.5"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/></svg>
+                    <span className="text-sm text-red-400 font-medium">交付失败</span>
+                  </div>
+                  {deliverResult.error_message && (
+                    <div className="text-xs text-zinc-500 break-all">{deliverResult.error_message}</div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Layout, type PageKey } from "./components/Layout";
+import { Layout, showToast, type PageKey } from "./components/Layout";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { ChatPanel } from "./components/ChatPanel";
 import { TriggerConfig } from "./components/TriggerConfig";
@@ -8,8 +8,12 @@ import { DraftEditor } from "./components/DraftEditor";
 import { Delivery } from "./components/Delivery";
 import { Settings } from "./components/Settings";
 import { Login } from "./components/Login";
-import { streamDraft, type Draft, AUTH_LOGOUT_EVENT, getToken, clearToken, triggerAgent, type AgentRunItem } from "./api/client";
+import { getDraft, type Draft, AUTH_LOGOUT_EVENT, getToken, clearToken, triggerAgent, type AgentRunItem } from "./api/client";
 import { getMe, logout as apiLogout } from "./api/auth";
+import { useIsMobile } from "./hooks/useIsMobile";
+import { useKeyboardShortcut } from "./hooks/useKeyboardShortcut";
+import { useHashRouter, isWorkflowRoute } from "./hooks/useHashRouter";
+import { useStreamDraft } from "./hooks/useStreamDraft";
 
 type AuthState = "loading" | "authenticated" | "unauthenticated";
 
@@ -22,28 +26,22 @@ const PAGE_MAP: Record<number, PageKey> = {
   6: "settings",
 };
 
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  return isMobile;
-}
-
 export default function App() {
   const isMobile = useIsMobile();
+  const { route, navigate: navigateRoute } = useHashRouter();
+  const currentPage: PageKey = route.page;
+  const routeRunId = isWorkflowRoute(route) ? route.runId : null;
+
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [username, setUsername] = useState<string>("");
 
-  const [currentPage, setCurrentPage] = useState<PageKey>("board");
   const [selectedTask, setSelectedTask] = useState<AgentRunItem | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>({ content: "", marks: [], completeness: 0 });
   const [runId, setRunId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const tok = getToken();
@@ -65,19 +63,19 @@ export default function App() {
   useEffect(() => {
     const onLogout = () => {
       setAuthState("unauthenticated");
-      setCurrentPage("board");
+      navigateRoute({ page: "board" });
       setRunId(null);
       setSelectedTask(null);
       setChatOpen(false);
     };
     window.addEventListener(AUTH_LOGOUT_EVENT, onLogout);
     return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onLogout);
-  }, []);
+  }, [navigateRoute]);
 
   const handleAuthenticated = useCallback(() => {
     setAuthState("authenticated");
-    setCurrentPage("board");
-  }, []);
+    navigateRoute({ page: "board" });
+  }, [navigateRoute]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -89,19 +87,20 @@ export default function App() {
     setRunId(null);
     setSelectedTask(null);
     setChatOpen(false);
-  }, []);
+    navigateRoute({ page: "board" });
+  }, [navigateRoute]);
 
   const handleTrigger = useCallback(async (newRunId: string) => {
     setRunId(newRunId);
     setDraft({ content: "", marks: [], completeness: 0 });
     setIsStreaming(true);
     setError(null);
-    setCurrentPage("context");
-  }, []);
+    navigateRoute({ page: "context", runId: newRunId });
+  }, [navigateRoute]);
 
   const handleConfirmed = useCallback(() => {
-    setCurrentPage("delivery");
-  }, []);
+    if (runId) navigateRoute({ page: "delivery", runId });
+  }, [runId, navigateRoute]);
 
   const handleAddTask = useCallback(async (text: string) => {
     const res = await triggerAgent(text);
@@ -110,32 +109,71 @@ export default function App() {
     setSelectedTask(null);
     setChatOpen(false);
     setError(null);
+    // 不跳 context，留在看板；SSE 在后台流式生成草稿，用户从看板点进去可查看
+    navigateRoute({ page: "board" });
+  }, [navigateRoute]);
+
+  // 从看板卡片菜单"查看草稿"跳转到该 run 的草稿页
+  const handleViewDraft = useCallback((runId: string) => {
+    navigateRoute({ page: "draft", runId });
+  }, [navigateRoute]);
+
+  // SSE 流式拉取草稿：useStreamDraft 封装了 3 次重连逻辑，
+  // 短暂网络抖动会自动重连，连续 3 次 CLOSED 才彻底失败。
+  useStreamDraft(
+    runId,
+    retryKey,
+    (text) => {
+      setDraft((d) => ({ ...d, content: d.content + text }));
+    },
+    (marks) => {
+      setDraft((d) => ({ ...d, marks, completeness: 1 }));
+      setIsStreaming(false);
+    },
+    (err) => {
+      setError(err.message);
+      showToast("SSE 错误", err.message, "error");
+      setIsStreaming(false);
+    }
+  );
+
+  // 进入工作流页（routeRunId 变化）时恢复 draft：刷新或直接 URL 进入时
+  // getDraft 拉取已落库内容；若未完成则启动 SSE 续传。
+  useEffect(() => {
+    if (!routeRunId) return;
+    if (routeRunId === runId) return; // 已在跑 SSE，无需恢复
+    getDraft(routeRunId)
+      .then((d) => {
+        if (d.completeness >= 1) {
+          // 已完成：直接显示，不启动 SSE
+          setDraft({ content: d.markdown, marks: d.marks, completeness: d.completeness });
+          setIsStreaming(false);
+        } else {
+          // 未完成：重置 draft 并启动 SSE 续传
+          setDraft({ content: "", marks: [], completeness: 0 });
+          setRunId(routeRunId);
+          setIsStreaming(true);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeRunId]);
+
+  const handleRetrySSE = useCallback(() => {
+    setError(null);
+    setRetryKey((k) => k + 1);
   }, []);
 
-  useEffect(() => {
-    if (!runId) return;
-    const cleanup = streamDraft(
-      runId,
-      (text) => {
-        setDraft((d) => ({ ...d, content: d.content + text }));
-      },
-      (marks) => {
-        setDraft((d) => ({ ...d, marks, completeness: 1 }));
-        setIsStreaming(false);
-      },
-      (err) => {
-        setError(`SSE 错误: ${err.message}`);
-        setIsStreaming(false);
-      }
-    );
-    return cleanup;
-  }, [runId]);
-
+  // navigate 兼容子组件传 PageKey | number（沿用 PAGE_MAP），转调 router.navigate
   const navigate = (page: PageKey | number) => {
-    if (typeof page === "number") {
-      setCurrentPage(PAGE_MAP[page] || "board");
+    const key = typeof page === "number" ? PAGE_MAP[page] || "board" : page;
+    if (key === "context" || key === "draft" || key === "delivery") {
+      if (runId) navigateRoute({ page: key, runId });
     } else {
-      setCurrentPage(page);
+      navigateRoute({ page: key });
     }
     window.scrollTo(0, 0);
   };
@@ -150,14 +188,8 @@ export default function App() {
     setSelectedTask(null);
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && chatOpen) {
-        handleCloseChat();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+  useKeyboardShortcut("Escape", () => {
+    if (chatOpen) handleCloseChat();
   }, [chatOpen, handleCloseChat]);
 
   if (authState === "loading") {
@@ -184,6 +216,7 @@ export default function App() {
             onDeselectTask={handleCloseChat}
             selectedTaskId={selectedTask?.id ?? null}
             onAddTask={handleAddTask}
+            onViewDraft={handleViewDraft}
           />
         );
       case "trigger":
@@ -198,15 +231,17 @@ export default function App() {
         return (
           <ContextCollection
             draft={draft}
-            runId={runId}
+            runId={routeRunId ?? runId}
             onNavigate={navigate}
+            error={error}
+            onRetry={handleRetrySSE}
           />
         );
       case "draft":
         return (
           <DraftEditor
             draft={draft}
-            runId={runId}
+            runId={routeRunId ?? runId}
             onConfirmed={handleConfirmed}
             onNavigate={navigate}
           />
@@ -215,7 +250,7 @@ export default function App() {
         return (
           <Delivery
             draft={draft}
-            runId={runId}
+            runId={routeRunId ?? runId}
             onNavigate={navigate}
           />
         );
@@ -242,6 +277,7 @@ export default function App() {
       onCloseChat={handleCloseChat}
       onLogout={handleLogout}
       username={username}
+      onSearch={handleAddTask}
       chatPanel={chatPanel}
     >
       {renderPage()}

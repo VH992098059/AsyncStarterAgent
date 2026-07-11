@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { triggerAgent, listKeywords, listDataSources, type KeywordItem, type DataSourceItem } from "../api/client";
 import { useRipple } from "../hooks/useRipple";
+import type { PageKey } from "./Layout";
 
 interface TriggerConfigProps {
   onTrigger: (runId: string) => void;
   onError: (msg: string | null) => void;
-  onNavigate: (page: number) => void;
+  onNavigate: (page: PageKey) => void;
 }
 
 function formatLastSync(iso?: string | null): string {
@@ -20,10 +21,10 @@ function formatLastSync(iso?: string | null): string {
 }
 
 const STATUS_BADGE: Record<string, { label: string; color: string; dot: string }> = {
-  active: { label: "已连接", color: "text-emerald-400", dot: "bg-emerald-500" },
-  connected: { label: "已连接", color: "text-emerald-400", dot: "bg-emerald-500" },
-  inactive: { label: "未连接", color: "text-zinc-500", dot: "bg-zinc-600" },
-  error: { label: "异常", color: "text-red-400", dot: "bg-red-500" },
+  active: { label: "已连接", color: "text-emerald-500 dark:text-emerald-400", dot: "bg-emerald-500" },
+  connected: { label: "已连接", color: "text-emerald-500 dark:text-emerald-400", dot: "bg-emerald-500" },
+  inactive: { label: "未连接", color: "text-[var(--text-muted)]", dot: "bg-[var(--text-muted)]" },
+  error: { label: "异常", color: "text-red-500 dark:text-red-400", dot: "bg-red-500" },
 };
 
 export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigProps) {
@@ -79,7 +80,7 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
 
       <div className="mb-8">
         <h2 className="section-title mb-4">手动触发</h2>
-        <p className="text-xs text-zinc-500 mb-3">输入一段文本模拟触发，Agent会匹配关键词规则并执行对应的任务流程</p>
+        <p className="text-xs text-[var(--text-secondary)] mb-3">输入一段文本模拟触发，Agent会匹配关键词规则并执行对应的任务流程</p>
         <div className="config-card p-5">
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
@@ -88,7 +89,7 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
               onChange={(e) => setTriggerText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleTestTrigger(); }}
               placeholder="输入触发文本进行测试..."
-              className="flex-1 px-4 py-3 rounded-xl bg-black/30 border border-white/5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/30"
+              className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-emerald-500/30"
             />
             <button
               onClick={(e) => { ripple(e); handleTestTrigger(); }}
@@ -104,9 +105,9 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
             <div className="app-card p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                <span className="text-sm text-amber-400">触发测试进行中...</span>
+                <span className="text-sm text-amber-500 dark:text-amber-400">触发测试进行中...</span>
               </div>
-              <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                 <div className="h-full progress-gradient rounded-full" style={{ width: "60%" }} />
               </div>
             </div>
@@ -116,12 +117,12 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
             <div className="app-card p-5 border-emerald-500/20">
               <div className="flex items-center gap-2 mb-2">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round"><path d="M2 8l4 4 8-8"/></svg>
-                <span className="text-sm text-emerald-400 font-medium">触发测试成功</span>
+                <span className="text-sm text-emerald-500 dark:text-emerald-400 font-medium">触发测试成功</span>
               </div>
-              <div className="text-xs text-zinc-500 mb-3">关键词匹配成功，上下文搜集已启动。</div>
+              <div className="text-xs text-[var(--text-secondary)] mb-3">关键词匹配成功，上下文搜集已启动。</div>
               <button
-                onClick={(e) => { ripple(e); onNavigate(3); }}
-                className="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium btn-press ripple-container"
+                onClick={(e) => { ripple(e); onNavigate("context"); }}
+                className="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium btn-press ripple-container"
               >
                 查看上下文搜集
               </button>
@@ -132,7 +133,7 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
             <div className="app-card p-5 border-red-500/20">
               <div className="flex items-center gap-2">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="8.5"/><circle cx="8" cy="11" r="0.5" fill="currentColor"/></svg>
-                <span className="text-sm text-red-400 font-medium">触发测试失败</span>
+                <span className="text-sm text-red-500 dark:text-red-400 font-medium">触发测试失败</span>
               </div>
             </div>
           )}
@@ -145,27 +146,27 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
           <button
             onClick={(e) => { ripple(e); load(); }}
             disabled={loading}
-            className="text-xs text-zinc-500 hover:text-zinc-300 btn-press ripple-container"
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] btn-press ripple-container"
           >
             {loading ? "加载中..." : "刷新"}
           </button>
         </div>
-        <p className="text-xs text-zinc-500 mb-4">当你输入或收到包含这些关键词的消息时，会自动触发对应的 Agent 任务</p>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">当你输入或收到包含这些关键词的消息时，会自动触发对应的 Agent 任务</p>
         {loading && keywords.length === 0 ? (
-          <div className="text-center py-8 text-sm text-zinc-500">加载中...</div>
+          <div className="text-center py-8 text-sm text-[var(--text-muted)]">加载中...</div>
         ) : keywords.length === 0 ? (
           <div className="app-card p-10 text-center">
-            <div className="text-sm text-zinc-500">暂未配置关键词规则</div>
+            <div className="text-sm text-[var(--text-muted)]">暂未配置关键词规则</div>
           </div>
         ) : (
           <div className="space-y-2 stagger-list">
             {keywords.map((kw) => (
               <div key={kw.pattern} className="list-item">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 flex items-center justify-center shrink-0">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
                 </div>
-                <span className="text-sm font-medium text-zinc-200 flex-1 truncate">{kw.pattern}</span>
-                <span className="text-[10px] text-zinc-500 px-2 py-1 rounded-md bg-zinc-800 shrink-0">
+                <span className="text-sm font-medium text-[var(--text-primary)] flex-1 truncate">{kw.pattern}</span>
+                <span className="text-[10px] text-[var(--text-muted)] px-2 py-1 rounded-md bg-[var(--bg-elevated)] shrink-0">
                   → {kw.task_type}
                 </span>
               </div>
@@ -176,12 +177,12 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
 
       <div>
         <h2 className="section-title mb-2">数据源</h2>
-        <p className="text-xs text-zinc-500 mb-4">Agent 在执行任务时从这些数据源获取上下文信息（如 GitHub 仓库、邮件、日历等）</p>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">Agent 在执行任务时从这些数据源获取上下文信息（如 GitHub 仓库、邮件、日历等）</p>
         {loading && dataSources.length === 0 ? (
-          <div className="text-center py-8 text-sm text-zinc-500">加载中...</div>
+          <div className="text-center py-8 text-sm text-[var(--text-muted)]">加载中...</div>
         ) : dataSources.length === 0 ? (
           <div className="app-card p-10 text-center">
-            <div className="text-sm text-zinc-500">尚未绑定任何数据源</div>
+            <div className="text-sm text-[var(--text-muted)]">尚未绑定任何数据源</div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 stagger-list">
@@ -191,12 +192,12 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
                 <div key={ds.id} className="app-card p-5 card-lift">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-sm font-semibold text-zinc-300">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center text-sm font-semibold text-[var(--text-secondary)]">
                         {ds.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-zinc-200">{ds.name}</div>
-                        <div className="text-[10px] text-zinc-600 uppercase mt-0.5">{ds.type}</div>
+                        <div className="text-sm font-medium text-[var(--text-primary)]">{ds.name}</div>
+                        <div className="text-[10px] text-[var(--text-muted)] uppercase mt-0.5">{ds.type}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -204,7 +205,7 @@ export function TriggerConfig({ onTrigger, onError, onNavigate }: TriggerConfigP
                       <span className={`text-xs ${badge.color}`}>{badge.label}</span>
                     </div>
                   </div>
-                  <div className="text-[11px] text-zinc-500 pt-3 border-t border-white/5">
+                  <div className="text-[11px] text-[var(--text-muted)] pt-3 border-t border-[var(--border-subtle)]">
                     {formatLastSync(ds.last_sync_at)}
                   </div>
                 </div>

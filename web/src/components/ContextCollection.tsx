@@ -1,16 +1,21 @@
 import type { Draft } from "../api/client";
+import { Breadcrumb } from "./Breadcrumb";
+import type { PageKey } from "./Layout";
 
 interface ContextCollectionProps {
   draft: Draft;
   runId: string | null;
-  onNavigate: (page: number) => void;
+  onNavigate: (page: PageKey) => void;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
-export function ContextCollection({ draft, runId, onNavigate }: ContextCollectionProps) {
-  const isStreaming = runId !== null && draft.completeness < 1;
+export function ContextCollection({ draft, runId, onNavigate, error, onRetry }: ContextCollectionProps) {
+  const isStreaming = runId !== null && draft.completeness < 1 && !error;
 
   return (
     <div className="pb-28 md:pb-24">
+      <Breadcrumb title="上下文搜集" runId={runId} onBackToBoard={() => onNavigate("board")} />
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">上下文搜集</h1>
         <p className="text-zinc-500 text-sm mt-1.5">
@@ -29,7 +34,7 @@ export function ContextCollection({ draft, runId, onNavigate }: ContextCollectio
           </div>
           <div className="text-zinc-400 text-sm mb-5">暂无运行中的 Agent 任务</div>
           <button
-            onClick={() => onNavigate(2)}
+            onClick={() => onNavigate("trigger")}
             className="px-6 py-3 rounded-xl bg-emerald-500 text-white text-sm font-medium btn-press hover:bg-emerald-400 transition-colors"
           >
             前往触发
@@ -40,8 +45,10 @@ export function ContextCollection({ draft, runId, onNavigate }: ContextCollectio
           <div className="app-card-elevated p-6 mb-5">
             <div className="flex items-center gap-6 flex-wrap mb-4">
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isStreaming ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-                <span className="text-sm text-zinc-300">{isStreaming ? "搜集进行中" : "搜集完成"}</span>
+                <span className={`w-2 h-2 rounded-full ${error ? "bg-red-500" : isStreaming ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                <span className="text-sm text-zinc-300">
+                  {error ? "搜集失败" : isStreaming ? "搜集进行中" : "搜集完成"}
+                </span>
               </div>
               <div className="flex-1" />
               <span className="text-sm text-zinc-500 font-medium">
@@ -50,10 +57,23 @@ export function ContextCollection({ draft, runId, onNavigate }: ContextCollectio
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-700 ease-out ${isStreaming ? "progress-gradient" : "bg-emerald-500"}`}
-                style={{ width: `${Math.round(draft.completeness * 100)}%` }}
+                className={`h-full rounded-full transition-all duration-700 ease-out ${error ? "bg-red-500" : isStreaming ? "progress-gradient" : "bg-emerald-500"}`}
+                style={{ width: `${error ? 100 : Math.round(draft.completeness * 100)}%` }}
               />
             </div>
+            {error && (
+              <div className="mt-4">
+                <div className="text-xs text-red-400 break-all mb-3">{error}</div>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="px-4 py-2 rounded-lg border border-red-500/30 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-colors"
+                  >
+                    重试
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {draft.content && (
@@ -87,7 +107,7 @@ export function ContextCollection({ draft, runId, onNavigate }: ContextCollectio
 
           {!isStreaming && draft.content && (
             <button
-              onClick={() => onNavigate(4)}
+              onClick={() => onNavigate("draft")}
               className="px-6 py-3 rounded-xl bg-emerald-500 text-white text-sm font-medium btn-press flex items-center gap-2 hover:bg-emerald-400 transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 3h10v10H3z"/><path d="M3 6h10"/></svg>

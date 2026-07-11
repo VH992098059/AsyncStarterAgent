@@ -11,6 +11,13 @@ import {
   IconChevronDown,
   IconTrigger,
 } from "./Icons";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { useClickOutside } from "../hooks/useClickOutside";
+import { showToast } from "../hooks/useToast";
+import { ToastContainer } from "./ToastContainer";
+
+// re-export 保持 App.tsx / KanbanBoard.tsx 等现有 `import { showToast } from "./Layout"` 兼容。
+export { showToast };
 
 export type PageKey = "board" | "trigger" | "context" | "draft" | "delivery" | "settings";
 
@@ -22,59 +29,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: "board", label: "看板", icon: <IconBoard /> },
+  { key: "trigger", label: "规则", icon: <IconTrigger /> },
+  { key: "settings", label: "设置", icon: <IconSettings /> },
 ];
-
-interface Toast {
-  id: number;
-  title: string;
-  message?: string;
-  type: "success" | "error" | "info";
-}
-
-let toastId = 0;
-let toastListeners: ((toast: Toast) => void)[] = [];
-
-export function showToast(title: string, message?: string, type: "success" | "error" | "info" = "info") {
-  const toast: Toast = { id: ++toastId, title, message, type };
-  toastListeners.forEach((fn) => fn(toast));
-}
-
-function ToastContainer() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  useEffect(() => {
-    const listener = (toast: Toast) => {
-      setToasts((prev) => [...prev, toast]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-      }, 2500);
-    };
-    toastListeners.push(listener);
-    return () => {
-      toastListeners = toastListeners.filter((fn) => fn !== listener);
-    };
-  }, []);
-
-  return (
-    <div className="fixed top-16 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`pointer-events-auto min-w-[220px] max-w-[320px] rounded-lg border px-3 py-2 shadow-lg backdrop-blur-xl toast-enter text-sm ${
-            t.type === "success"
-              ? "bg-emerald-500/15 border-emerald-500/25 text-emerald-400"
-              : t.type === "error"
-              ? "bg-red-500/15 border-red-500/25 text-red-400"
-              : "toast-info"
-          }`}
-        >
-          <div className="font-medium">{t.title}</div>
-          {t.message && <div className="text-xs opacity-70 mt-0.5">{t.message}</div>}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 interface LayoutProps {
   currentPage: PageKey;
@@ -83,36 +40,18 @@ interface LayoutProps {
   onCloseChat?: () => void;
   onLogout?: () => void;
   username?: string;
+  onSearch?: (text: string) => Promise<void> | void;
   children: ReactNode;
   chatPanel: ReactNode;
-}
-
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  return isMobile;
 }
 
 function UserMenu({ username, onLogout }: { username?: string; onLogout?: () => void }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
 
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (btnRef.current && btnRef.current.contains(target)) return;
-      const dropdown = document.getElementById("user-dropdown-popup");
-      if (dropdown && dropdown.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  useClickOutside(btnRef, () => setOpen(false), [dropdownRef]);
 
   useEffect(() => {
     if (open && btnRef.current) {
@@ -144,7 +83,7 @@ function UserMenu({ username, onLogout }: { username?: string; onLogout?: () => 
       </button>
       {open && dropdownPos && (
         <div
-          id="user-dropdown-popup"
+          ref={dropdownRef}
           className="user-dropdown"
           style={{
             position: "fixed",
@@ -174,13 +113,31 @@ function UserMenu({ username, onLogout }: { username?: string; onLogout?: () => 
   );
 }
 
-export function Layout({ currentPage, onNavigate, chatOpen, onCloseChat, onLogout, username, children, chatPanel }: LayoutProps) {
+export function Layout({ currentPage, onNavigate, chatOpen, onCloseChat, onLogout, username, onSearch, children, chatPanel }: LayoutProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [searching, setSearching] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("asa-theme");
     return saved ? saved === "dark" : true;
   });
+
+  const handleSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" || !onSearch) return;
+    const text = searchText.trim();
+    if (!text || searching) return;
+    e.preventDefault();
+    setSearching(true);
+    try {
+      await onSearch(text);
+      setSearchText("");
+    } catch (err) {
+      showToast("触发失败", err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setSearching(false);
+    }
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -228,6 +185,10 @@ export function Layout({ currentPage, onNavigate, chatOpen, onCloseChat, onLogou
             <input
               type="text"
               placeholder="输入指令快速触发 Agent..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              disabled={searching || !onSearch}
             />
           </div>
         </div>
@@ -260,23 +221,6 @@ export function Layout({ currentPage, onNavigate, chatOpen, onCloseChat, onLogou
           </div>
 
           <div className="sidebar-bottom">
-            <button
-              className={`sidebar-item ${currentPage === "trigger" ? "active" : ""}`}
-              onClick={() => handleNavClick("trigger")}
-              title="触发规则配置"
-            >
-              <IconTrigger size={20} />
-              <span>规则</span>
-            </button>
-            <button
-              className={`sidebar-item ${currentPage === "settings" ? "active" : ""}`}
-              onClick={() => handleNavClick("settings")}
-              title="设置"
-            >
-              <IconSettings size={20} />
-              <span>设置</span>
-            </button>
-            <div className="sidebar-divider" />
             <UserMenu username={username} onLogout={onLogout} />
           </div>
         </nav>

@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())

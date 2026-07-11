@@ -152,6 +152,11 @@ export async function triggerAgent(text: string): Promise<TriggerResponse> {
 /** GET /api/v1/drafts/:id/stream - SSE 流式获取草稿 (FR-C05)
  *  EventSource 不支持自定义 Header，因此 token 走 query string 后端读取。
  *  后端 SSE 端点接受 ?token= 形式（这是 EventSource 的标准限制）。
+ *
+ *  后端 A2UI 协议：`data: {"type":"delta|complete|error", ...}\n\n`（无 event 前缀），
+ *  因此前端必须用 onmessage 监听并按 type 分发，不能用 addEventListener("delta")。
+ *  error 事件不立即 close：仅当 readyState===CLOSED（连接彻底断开）时才回调 onError，
+ *  保留浏览器对临时网络抖动的自动重连能力。
  */
 export function streamDraft(
   runId: string,
@@ -164,27 +169,36 @@ export function streamDraft(
     ? `${API_BASE}/api/v1/drafts/${runId}/stream?token=${encodeURIComponent(tok)}`
     : `${API_BASE}/api/v1/drafts/${runId}/stream`;
   const es = new EventSource(url);
-  es.addEventListener("delta", (e) => {
+  es.onmessage = (e) => {
     try {
-      const data = JSON.parse((e as MessageEvent).data);
-      onDelta(data.text);
+      const data = JSON.parse(e.data);
+      switch (data.type) {
+        case "delta":
+          onDelta(data.text ?? "");
+          break;
+        case "complete":
+          onComplete(data.marks ?? []);
+          es.close();
+          break;
+        case "error":
+          onError(new Error(data.message ?? "stream error"));
+          es.close();
+          break;
+        default:
+          // 未知事件类型忽略（progress 等阶段事件前端不处理）
+          break;
+      }
     } catch (err) {
-      onError(new Error(`parse delta: ${err instanceof Error ? err.message : String(err)}`));
+      onError(new Error(`parse SSE: ${err instanceof Error ? err.message : String(err)}`));
+      es.close();
     }
-  });
-  es.addEventListener("complete", (e) => {
-    try {
-      const data = JSON.parse((e as MessageEvent).data);
-      onComplete(data.marks ?? []);
-    } catch (err) {
-      onError(new Error(`parse complete: ${err instanceof Error ? err.message : String(err)}`));
+  };
+  es.onerror = () => {
+    // 仅当连接彻底断开时才通知上层；临时错误让浏览器自动重连
+    if (es.readyState === EventSource.CLOSED) {
+      onError(new Error("SSE connection closed"));
     }
-    es.close();
-  });
-  es.addEventListener("error", () => {
-    onError(new Error("SSE connection error"));
-    es.close();
-  });
+  };
   return () => es.close();
 }
 
@@ -259,9 +273,16 @@ export interface AgentRunsResponse {
   stats: AgentRunStats;
 }
 
-/** GET /api/v1/agent-runs?limit=N - 近期运行列表 + 状态统计 */
-export async function listAgentRuns(limit = 20): Promise<AgentRunsResponse> {
-  return apiFetch<AgentRunsResponse>(`/api/v1/agent-runs?limit=${limit}`);
+/**
+ * GET /api/v1/agent-runs?limit=N&before=<RFC3339> - 近期运行列表 + 状态统计。
+ * before 用于游标分页：仅返回 created_at 严格早于 before 的记录。
+ * 调用方通常传最后一条 runs[].created_at 作为下一页游标。
+ */
+export async function listAgentRuns(limit = 20, before?: string): Promise<AgentRunsResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  if (before) params.set("before", before);
+  return apiFetch<AgentRunsResponse>(`/api/v1/agent-runs?${params.toString()}`);
 }
 
 // ========== Settings（模型/Embedding/第三方配置） ==========
@@ -318,4 +339,218 @@ export async function testLLMConnection(): Promise<{ status: string }> {
 export function isMaskedKey(key: string): boolean {
   if (!key) return true;
   return /\*{4}/.test(key);
+}
+
+// ========== AgentRun Detail + CRUD（阶段1 新增） ==========
+
+export interface AgentRunDetail {
+  id: string;
+  task_type: string;
+  status: string;
+  current_stage: string;
+  trigger_type: string;
+  trigger_source: string;
+  error_message: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+/** GET /api/v1/agent-runs/:id - 单 run 详情 */
+export async function getAgentRunDetail(id: string): Promise<AgentRunDetail> {
+  return apiFetch<AgentRunDetail>(`/api/v1/agent-runs/${id}`);
+}
+
+/** DELETE /api/v1/agent-runs/:id - 删除 run（FK CASCADE 清草稿/交付/消息） */
+export async function deleteRun(id: string): Promise<{ deleted: string }> {
+  return apiFetch<{ deleted: string }>(`/api/v1/agent-runs/${id}`, { method: "DELETE" });
+}
+
+/** POST /api/v1/agent-runs/:id/cancel - 取消 run */
+export async function cancelRun(id: string): Promise<{ cancelled: string }> {
+  return apiFetch<{ cancelled: string }>(`/api/v1/agent-runs/${id}/cancel`, { method: "POST" });
+}
+
+/** archiveRun 是 cancelRun 的语义别名（前端看板用"归档"文案） */
+export async function archiveRun(id: string): Promise<{ cancelled: string }> {
+  return cancelRun(id);
+}
+
+/** POST /api/v1/agent-runs/:id/retry - 基于原 run 创建新 run，返回新 run_id */
+export async function retryRun(id: string): Promise<{ run_id: string }> {
+  return apiFetch<{ run_id: string }>(`/api/v1/agent-runs/${id}/retry`, { method: "POST" });
+}
+
+// ========== Draft Detail + Mark 解决 + 交付历史（阶段1 新增） ==========
+
+export interface DraftDetail {
+  run_id: string;
+  title: string;
+  markdown: string;
+  completeness: number;
+  marks: Mark[];
+  status: string;
+  updated_at: string;
+}
+
+/** GET /api/v1/drafts/:id - 草稿详情（含 marks 与 completeness） */
+export async function getDraft(runId: string): Promise<DraftDetail> {
+  return apiFetch<DraftDetail>(`/api/v1/drafts/${runId}`);
+}
+
+/** PUT /api/v1/drafts/:id - 更新草稿正文，后端同步重算 marks/completeness */
+export async function updateDraft(runId: string, markdown: string): Promise<{ updated: string }> {
+  return apiFetch<{ updated: string }>(`/api/v1/drafts/${runId}`, {
+    method: "PUT",
+    body: { markdown },
+  });
+}
+
+/** POST /api/v1/drafts/:id/marks/:markID/resolve - 替换占位符，返回新 markdown */
+export async function resolveMark(
+  runId: string,
+  markId: string,
+  value: string
+): Promise<{ markdown: string }> {
+  return apiFetch<{ markdown: string }>(
+    `/api/v1/drafts/${runId}/marks/${markId}/resolve`,
+    { method: "POST", body: { value } }
+  );
+}
+
+export interface DeliveryRecord {
+  id: string;
+  target_type: string;
+  target_url: string;
+  status: string;
+  error_message: string;
+  created_at: string;
+}
+
+/** GET /api/v1/drafts/:id/deliveries - 交付历史列表 */
+export async function listDeliveries(runId: string): Promise<{ deliveries: DeliveryRecord[] }> {
+  return apiFetch<{ deliveries: DeliveryRecord[] }>(`/api/v1/drafts/${runId}/deliveries`);
+}
+
+// ========== Chat 对话（阶段4 新增） ==========
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  reasoning_content: string;
+  status: "sent" | "streaming" | "done" | "error";
+  error_message: string;
+  created_at: string;
+}
+
+/** GET /api/v1/agent-runs/:id/messages - 历史消息列表 */
+export async function listMessages(runId: string): Promise<ChatMessage[]> {
+  const res = await apiFetch<{ messages: ChatMessage[] }>(`/api/v1/agent-runs/${runId}/messages`);
+  return res.messages ?? [];
+}
+
+export interface ChatStreamHandlers {
+  onDelta: (text: string, messageId: string) => void;
+  onComplete: (messageId: string) => void;
+  onError: (err: Error, messageId: string) => void;
+}
+
+/**
+ * POST /api/v1/agent-runs/:id/chat - 流式 LLM 对话
+ *
+ * 用 fetch + ReadableStream（不用 EventSource，POST 不支持）。
+ * 解析 SSE `data: {type, text, message_id}\n\n` 格式。
+ *
+ * 用户主动 abort（signal.abort()）时 reject AbortError，
+ * 调用方应捕获并忽略此错误（不当作失败）。
+ */
+export async function sendChatMessage(
+  runId: string,
+  message: string,
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal
+): Promise<void> {
+  const tok = getToken();
+  const res = await fetch(`${API_BASE}/api/v1/agent-runs/${runId}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+    },
+    body: JSON.stringify({ message }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = `请求失败: ${res.status}`;
+    try {
+      const json = JSON.parse(text);
+      msg = json.message || json.data?.message || msg;
+    } catch {
+      // 非 JSON 响应，用默认 msg
+    }
+    if (res.status === 401) {
+      clearToken();
+      emitAuthLogout();
+      throw new AuthError(msg, 401);
+    }
+    throw new Error(msg);
+  }
+
+  if (!res.body) {
+    throw new Error("响应体为空");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE 事件以 \n\n 分隔
+      let sepIdx: number;
+      while ((sepIdx = buffer.indexOf("\n\n")) >= 0) {
+        const rawEvent = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+
+        // 提取 data: 行内容（可能有多个 data: 行，拼接）
+        let dataLine = "";
+        for (const line of rawEvent.split("\n")) {
+          if (line.startsWith("data: ")) {
+            dataLine += line.slice(6);
+          }
+        }
+        if (!dataLine) continue;
+
+        try {
+          const data = JSON.parse(dataLine);
+          switch (data.type) {
+            case "chat_delta":
+              handlers.onDelta(data.text ?? "", data.message_id ?? "");
+              break;
+            case "chat_complete":
+              handlers.onComplete(data.message_id ?? "");
+              return;
+            case "chat_error":
+              handlers.onError(new Error(data.message ?? "chat error"), data.message_id ?? "");
+              return;
+            default:
+              // 未知事件忽略
+              break;
+          }
+        } catch (err) {
+          handlers.onError(new Error(`parse SSE: ${err instanceof Error ? err.message : String(err)}`), "");
+          return;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }

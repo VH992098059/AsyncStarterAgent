@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { login, register, saveAuth } from "../api/auth";
 import { useRipple } from "../hooks/useRipple";
 
@@ -56,6 +56,28 @@ export function Login({ onAuthenticated }: LoginProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const ripple = useRipple();
 
+  // 主题状态，与 Layout 保持同步
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem("asa-theme");
+    return saved ? saved === "dark" : document.documentElement.classList.contains("dark");
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      setDarkMode(document.documentElement.classList.contains("dark"));
+    };
+    window.addEventListener("theme-change", handler);
+    return () => window.removeEventListener("theme-change", handler);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next = !darkMode;
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("asa-theme", next ? "dark" : "light");
+    setDarkMode(next);
+    window.dispatchEvent(new Event("theme-change"));
+  }, [darkMode]);
+
   const isValid = useMemo(() => {
     const errors: FieldErrors = {};
     errors.username = validateUsername(username);
@@ -110,14 +132,50 @@ export function Login({ onAuthenticated }: LoginProps) {
   };
 
   const inputClass = (hasError: boolean) =>
-    `w-full px-4 py-3 rounded-xl bg-zinc-900/50 border text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none transition-colors ${
+    `w-full px-4 py-3 rounded-xl border text-sm focus:outline-none transition-colors ${
+      darkMode
+        ? "bg-zinc-900/50 text-zinc-200 placeholder:text-zinc-600"
+        : "bg-white text-zinc-800 placeholder:text-zinc-400"
+    } ${
       hasError
         ? "border-red-500/60 focus:border-red-500"
-        : "border-zinc-800 focus:border-emerald-500/50"
+        : darkMode
+          ? "border-zinc-800 focus:border-emerald-500/50"
+          : "border-zinc-300 focus:border-emerald-500/50"
     }`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative">
+      {/* Theme toggle */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className={`absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+          darkMode
+            ? "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+            : "bg-zinc-100 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200"
+        }`}
+        aria-label="切换主题"
+      >
+        {darkMode ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        )}
+      </button>
+
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
@@ -126,16 +184,18 @@ export function Login({ onAuthenticated }: LoginProps) {
               <path d="M2 8h12M8 2v12" />
             </svg>
           </div>
-          <span className="font-semibold text-base tracking-tight">Async Starter</span>
+          <span className={`font-semibold text-base tracking-tight ${darkMode ? "text-zinc-100" : "text-zinc-800"}`}>Async Starter</span>
         </div>
 
         <div className="glass-card card-lift rounded-2xl p-6 md:p-8 animate-fade-in-up">
           {/* Tabs */}
-          <div className="flex items-center gap-1 mb-6 p-1 bg-zinc-900/50 rounded-xl">
+          <div className={`flex items-center gap-1 mb-6 p-1 rounded-xl ${darkMode ? "bg-zinc-900/50" : "bg-zinc-100"}`}>
             <button
               type="button"
               className={`flex-1 py-2 rounded-lg text-sm font-medium btn-press ripple-container transition-colors ${
-                tab === "login" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                tab === "login"
+                  ? darkMode ? "bg-zinc-800 text-zinc-100" : "bg-white text-zinc-800 shadow-sm"
+                  : darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-500 hover:text-zinc-700"
               }`}
               onClick={(e) => { ripple(e); handleTabChange("login"); }}
             >
@@ -144,7 +204,9 @@ export function Login({ onAuthenticated }: LoginProps) {
             <button
               type="button"
               className={`flex-1 py-2 rounded-lg text-sm font-medium btn-press ripple-container transition-colors ${
-                tab === "register" ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                tab === "register"
+                  ? darkMode ? "bg-zinc-800 text-zinc-100" : "bg-white text-zinc-800 shadow-sm"
+                  : darkMode ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-500 hover:text-zinc-700"
               }`}
               onClick={(e) => { ripple(e); handleTabChange("register"); }}
             >
@@ -154,7 +216,7 @@ export function Login({ onAuthenticated }: LoginProps) {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
+              <label className={`block text-xs font-medium uppercase tracking-wider mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
                 用户名
               </label>
               <input
@@ -179,7 +241,7 @@ export function Login({ onAuthenticated }: LoginProps) {
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
+              <label className={`block text-xs font-medium uppercase tracking-wider mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
                 密码
               </label>
               <input
@@ -212,7 +274,7 @@ export function Login({ onAuthenticated }: LoginProps) {
             </div>
             {tab === "register" && (
               <div>
-                <label className="block text-xs font-medium text-zinc-400 uppercase tracking-wider mb-2">
+                <label className={`block text-xs font-medium uppercase tracking-wider mb-2 ${darkMode ? "text-zinc-400" : "text-zinc-500"}`}>
                   再次输入密码
                 </label>
                 <input
@@ -272,11 +334,11 @@ export function Login({ onAuthenticated }: LoginProps) {
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-zinc-800 text-xs text-zinc-500 text-center">
+          <div className={`mt-6 pt-5 border-t text-xs text-center ${darkMode ? "border-zinc-800 text-zinc-500" : "border-zinc-200 text-zinc-500"}`}>
             {tab === "login" ? "还没有账号？" : "已有账号？"}
             <button
               type="button"
-              className="text-emerald-400 hover:underline ml-1"
+              className="text-emerald-500 hover:underline ml-1"
               onClick={() => handleTabChange(tab === "login" ? "register" : "login")}
             >
               {tab === "login" ? "立即注册" : "返回登录"}
