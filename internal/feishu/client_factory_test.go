@@ -9,17 +9,38 @@ import (
 	"github.com/google/uuid"
 )
 
+func newTestFactory(store TokenStore, appCfgStore AppConfigStore, doer HTTPDoer) *ClientFactory {
+	auth := NewAuthClient(OAuthConfig{HTTPClient: doer})
+	return NewClientFactory(store, appCfgStore, auth)
+}
+
 func TestClientFactory_GetClient_NotAuthorized(t *testing.T) {
 	store := newMemTokenStore() // 空 store
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y"})
-	factory := NewClientFactory("x", "y", store, auth)
+	uid := uuid.New()
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, nil)
 
-	_, _, err := factory.GetClient(context.Background(), uuid.New())
+	_, _, err := factory.GetClient(context.Background(), uid)
 	if err == nil {
 		t.Fatal("expected ErrNotAuthorized")
 	}
 	if _, ok := err.(*ErrNotAuthorized); !ok {
 		t.Fatalf("expected ErrNotAuthorized, got %T: %v", err, err)
+	}
+}
+
+func TestClientFactory_GetClient_AppNotConfigured(t *testing.T) {
+	store := newMemTokenStore()
+	appCfgStore := newMemAppConfigStore() // 空，不 upsert 任何记录
+	factory := newTestFactory(store, appCfgStore, nil)
+
+	_, _, err := factory.GetClient(context.Background(), uuid.New())
+	if err == nil {
+		t.Fatal("expected ErrAppNotConfigured")
+	}
+	if _, ok := err.(*ErrAppNotConfigured); !ok {
+		t.Fatalf("expected ErrAppNotConfigured, got %T: %v", err, err)
 	}
 }
 
@@ -34,8 +55,9 @@ func TestClientFactory_GetClient_ValidToken(t *testing.T) {
 		ExpiresAt:    time.Now().Add(2 * time.Hour), // 未过期
 	})
 
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y"})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, nil)
 
 	cli, token, err := factory.GetClient(context.Background(), uid)
 	if err != nil {
@@ -71,8 +93,9 @@ func TestClientFactory_GetClient_Expired_RefreshSuccess(t *testing.T) {
 			}
 		}`,
 	}
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, doer)
 
 	cli, token, err := factory.GetClient(context.Background(), uid)
 	if err != nil {
@@ -106,8 +129,9 @@ func TestClientFactory_GetClient_RefreshFailed_DeletesToken(t *testing.T) {
 	doer := &mockHTTPDoer{
 		respBody: `{"code": 10003, "msg": "refresh token invalid"}`,
 	}
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, doer)
 
 	_, _, err := factory.GetClient(context.Background(), uid)
 	if err == nil {
@@ -127,8 +151,9 @@ func TestClientFactory_GetClient_RefreshFailed_DeletesToken(t *testing.T) {
 func TestClientFactory_IsAuthorized(t *testing.T) {
 	store := newMemTokenStore()
 	uid := uuid.New()
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y"})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, nil)
 
 	if factory.IsAuthorized(context.Background(), uid) {
 		t.Error("should not be authorized initially")
@@ -147,8 +172,9 @@ func TestClientFactory_Revoke(t *testing.T) {
 	store := newMemTokenStore()
 	uid := uuid.New()
 	_ = store.Save(context.Background(), TokenRecord{UserID: uid, AccessToken: "x"})
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y"})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, nil)
 
 	if err := factory.Revoke(context.Background(), uid); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -177,8 +203,9 @@ func TestClientFactory_IsAuthorized_ExpiredToken(t *testing.T) {
 		AccessToken: "expired",
 		ExpiresAt:   time.Now().Add(-1 * time.Minute), // 已过期
 	})
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y"})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, nil)
 	if !factory.IsAuthorized(context.Background(), uid) {
 		t.Error("expired token should still count as authorized (refresh may recover)")
 	}
@@ -210,8 +237,9 @@ func TestClientFactory_ConcurrentRefresh_WaitsForCompletion(t *testing.T) {
 			}
 		}`,
 	}
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, doer)
 
 	results := make(chan string, 2)
 	for i := 0; i < 2; i++ {
@@ -258,8 +286,9 @@ func TestClientFactory_RevokeDuringRefresh_DoesNotResurrect(t *testing.T) {
 			}
 		}`,
 	}
-	auth := NewAuthClient(OAuthConfig{AppID: "x", AppSecret: "y", HTTPClient: doer})
-	factory := NewClientFactory("x", "y", store, auth)
+	appCfgStore := newMemAppConfigStore()
+	_ = appCfgStore.Upsert(context.Background(), AppConfigRecord{UserID: uid, AppID: "x", AppSecret: "y"})
+	factory := newTestFactory(store, appCfgStore, doer)
 
 	refreshDone := make(chan struct{})
 	go func() {
