@@ -154,9 +154,10 @@ func (c *AuthClient) RefreshToken(ctx context.Context, appID, appSecret, refresh
 }
 
 // ToTokenRecord 把 TokenResponse 转成 TokenRecord（计算过期时间）
-func (t *TokenResponse) ToTokenRecord(userID uuid.UUID) TokenRecord {
+func (t *TokenResponse) ToTokenRecord(userID uuid.UUID, appID string) TokenRecord {
 	return TokenRecord{
 		UserID:       userID,
+		AppID:        appID,
 		AccessToken:  t.AccessToken,
 		RefreshToken: t.RefreshToken,
 		ExpiresAt:    time.Now().Add(time.Duration(t.ExpiresIn) * time.Second),

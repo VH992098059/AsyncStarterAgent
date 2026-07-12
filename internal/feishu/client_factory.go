@@ -158,7 +158,7 @@ func (f *ClientFactory) refreshToken(ctx context.Context, userID uuid.UUID, appI
 		return nil, &ErrRefreshFailed{UserID: userID, Cause: err}
 	}
 
-	rec := tr.ToTokenRecord(userID)
+	rec := tr.ToTokenRecord(userID, appID)
 
 	// 在同一把锁内完成"撤销检查 + 写回"，与 Revoke 的撤销标记/删除操作互斥，
 	// 避免 Revoke 发生在刷新进行中时，刷新完成后把已撤销的授权重新写回（"复活"）。

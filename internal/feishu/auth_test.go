@@ -160,9 +160,12 @@ func TestTokenResponse_ToTokenRecord(t *testing.T) {
 		OpenID:       "ou_abc",
 		Name:         "张三",
 	}
-	rec := tr.ToTokenRecord(uid)
+	rec := tr.ToTokenRecord(uid, "cli_xxx")
 	if rec.UserID != uid {
 		t.Errorf("user id mismatch")
+	}
+	if rec.AppID != "cli_xxx" {
+		t.Errorf("app id: %s", rec.AppID)
 	}
 	if rec.AccessToken != "u-xxx" {
 		t.Errorf("access token: %s", rec.AccessToken)

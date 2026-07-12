@@ -12,6 +12,7 @@ import (
 // TokenRecord 存储在 feishu_tokens 表中的 token 记录（解密后）
 type TokenRecord struct {
 	UserID       uuid.UUID
+	AppID        string // 决策：换 token 时使用的自建应用 ID（feishu_tokens.app_id 列）
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    time.Time
@@ -45,16 +46,17 @@ func (s *pgTokenStore) Save(ctx context.Context, rec TokenRecord) error {
 		return fmt.Errorf("feishu token store: DB_ENCRYPTION_KEY is empty")
 	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO feishu_tokens (user_id, access_token, refresh_token, expires_at, open_id, name, updated_at)
-		VALUES ($1, pgp_sym_encrypt($2, $3), pgp_sym_encrypt($4, $3), $5, $6, $7, NOW())
+		INSERT INTO feishu_tokens (user_id, app_id, access_token, refresh_token, expires_at, open_id, name, updated_at)
+		VALUES ($1, $2, pgp_sym_encrypt($3, $4), pgp_sym_encrypt($5, $4), $6, $7, $8, NOW())
 		ON CONFLICT (user_id) DO UPDATE SET
+			app_id = EXCLUDED.app_id,
 			access_token = EXCLUDED.access_token,
 			refresh_token = EXCLUDED.refresh_token,
 			expires_at = EXCLUDED.expires_at,
 			open_id = EXCLUDED.open_id,
 			name = EXCLUDED.name,
 			updated_at = NOW()
-	`, rec.UserID, rec.AccessToken, s.encKey, rec.RefreshToken, rec.ExpiresAt, rec.OpenID, rec.Name)
+	`, rec.UserID, rec.AppID, rec.AccessToken, s.encKey, rec.RefreshToken, rec.ExpiresAt, rec.OpenID, rec.Name)
 	if err != nil {
 		return fmt.Errorf("feishu token save: %w", err)
 	}
@@ -70,13 +72,14 @@ func (s *pgTokenStore) Get(ctx context.Context, userID uuid.UUID) (*TokenRecord,
 	rec := &TokenRecord{UserID: userID}
 	err := s.pool.QueryRow(ctx, `
 		SELECT
+			app_id,
 			pgp_sym_decrypt(access_token, $2) AS access_token,
 			pgp_sym_decrypt(refresh_token, $2) AS refresh_token,
 			expires_at,
 			COALESCE(open_id, ''),
 			COALESCE(name, '')
 		FROM feishu_tokens WHERE user_id = $1
-	`, userID, s.encKey).Scan(&rec.AccessToken, &rec.RefreshToken, &rec.ExpiresAt, &rec.OpenID, &rec.Name)
+	`, userID, s.encKey).Scan(&rec.AppID, &rec.AccessToken, &rec.RefreshToken, &rec.ExpiresAt, &rec.OpenID, &rec.Name)
 	if err != nil {
 		return nil, fmt.Errorf("feishu token get: %w", err)
 	}
