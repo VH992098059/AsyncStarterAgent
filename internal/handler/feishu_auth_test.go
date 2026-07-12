@@ -13,6 +13,7 @@ import (
 	"github.com/asyncstarter/agent/internal/feishu"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // --- state 编码/解码单元测试 ---
@@ -86,11 +87,11 @@ type fakeOAuthClient struct {
 	exchangeErr error
 }
 
-func (f *fakeOAuthClient) AuthorizeURL(state string) string {
+func (f *fakeOAuthClient) AuthorizeURL(appID, state string) string {
 	return "https://open.feishu.cn/open-apis/authen/v1/index?state=" + url.QueryEscape(state)
 }
 
-func (f *fakeOAuthClient) ExchangeCode(ctx context.Context, code string) (*feishu.TokenResponse, error) {
+func (f *fakeOAuthClient) ExchangeCode(ctx context.Context, appID, appSecret, code string) (*feishu.TokenResponse, error) {
 	if f.exchangeErr != nil {
 		return nil, f.exchangeErr
 	}
@@ -118,6 +119,28 @@ func (f *fakeTokenStore) Delete(ctx context.Context, userID uuid.UUID) error {
 	return f.deleteErr
 }
 
+// fakeAppConfigStore mock feishu.AppConfigStore 接口
+type fakeAppConfigStore struct {
+	rec *feishu.AppConfigRecord
+}
+
+func (f *fakeAppConfigStore) Get(ctx context.Context, userID uuid.UUID) (*feishu.AppConfigRecord, error) {
+	if f.rec == nil {
+		return nil, pgx.ErrNoRows
+	}
+	return f.rec, nil
+}
+
+func (f *fakeAppConfigStore) Upsert(ctx context.Context, rec feishu.AppConfigRecord) error {
+	f.rec = &rec
+	return nil
+}
+
+func (f *fakeAppConfigStore) Delete(ctx context.Context, userID uuid.UUID) error {
+	f.rec = nil
+	return nil
+}
+
 // --- Callback 集成测试 ---
 
 // TestFeishuAuth_Callback_Success 验证完整 OAuth 回调流程：
@@ -128,7 +151,8 @@ func TestFeishuAuth_Callback_Success(t *testing.T) {
 	client := &fakeOAuthClient{tokenResp: &feishu.TokenResponse{
 		AccessToken: "at-xxx", RefreshToken: "rt-xxx", ExpiresIn: 7200, OpenID: "ou-xxx", Name: "Tester",
 	}}
-	h := NewFeishuAuthHandler(client, store)
+	appCfgStore := &fakeAppConfigStore{rec: &feishu.AppConfigRecord{AppID: "app-x", AppSecret: "secret-y"}}
+	h := NewFeishuAuthHandler(client, store, appCfgStore)
 	userID := uuid.New()
 
 	// Step 1: StartAuth 签发 state（模拟 auth middleware 已注入 userID）
@@ -188,7 +212,8 @@ func TestFeishuAuth_Callback_StateReplay(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &fakeTokenStore{}
 	client := &fakeOAuthClient{tokenResp: &feishu.TokenResponse{AccessToken: "at", ExpiresIn: 7200}}
-	h := NewFeishuAuthHandler(client, store)
+	appCfgStore := &fakeAppConfigStore{rec: &feishu.AppConfigRecord{AppID: "app-x", AppSecret: "secret-y"}}
+	h := NewFeishuAuthHandler(client, store, appCfgStore)
 	userID := uuid.New()
 
 	// 签发 state
@@ -230,7 +255,7 @@ func TestFeishuAuth_Callback_InvalidState(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &fakeTokenStore{}
 	client := &fakeOAuthClient{}
-	h := NewFeishuAuthHandler(client, store)
+	h := NewFeishuAuthHandler(client, store, &fakeAppConfigStore{})
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -242,5 +267,22 @@ func TestFeishuAuth_Callback_InvalidState(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "授权失败") {
 		t.Errorf("expected error HTML, got %s", w.Body.String())
+	}
+}
+
+// TestFeishuAuth_StartAuth_AppNotConfigured 验证用户未配置飞书应用凭证时 StartAuth 报错
+func TestFeishuAuth_StartAuth_AppNotConfigured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewFeishuAuthHandler(&fakeOAuthClient{}, &fakeTokenStore{}, &fakeAppConfigStore{})
+	userID := uuid.New()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/start", nil)
+	c.Set(auth.ContextUserIDKey, userID.String())
+	h.StartAuth(c)
+
+	if w.Code == http.StatusOK {
+		t.Error("expected non-200 when app credentials not configured")
 	}
 }

@@ -28,23 +28,25 @@ import (
 // state 通过 URL 在飞书和 Callback 间传递，不依赖浏览器 cookie，
 // 适用于 Tauri/跨源部署（授权在系统浏览器进行，cookie 存在 webview，无法跨进程共享）。
 type FeishuAuthHandler struct {
-	authClient feishuOAuthClient
-	tokenStore feishu.TokenStore
-	states     *oauthStateStore
+	authClient     feishuOAuthClient
+	tokenStore     feishu.TokenStore
+	appConfigStore feishu.AppConfigStore
+	states         *oauthStateStore
 }
 
 // feishuOAuthClient 抽象飞书 OAuth 客户端方法，便于测试 mock。
 // 生产环境由 *feishu.AuthClient 实现。
 type feishuOAuthClient interface {
-	AuthorizeURL(state string) string
-	ExchangeCode(ctx context.Context, code string) (*feishu.TokenResponse, error)
+	AuthorizeURL(appID, state string) string
+	ExchangeCode(ctx context.Context, appID, appSecret, code string) (*feishu.TokenResponse, error)
 }
 
-func NewFeishuAuthHandler(authClient feishuOAuthClient, tokenStore feishu.TokenStore) *FeishuAuthHandler {
+func NewFeishuAuthHandler(authClient feishuOAuthClient, tokenStore feishu.TokenStore, appConfigStore feishu.AppConfigStore) *FeishuAuthHandler {
 	return &FeishuAuthHandler{
-		authClient: authClient,
-		tokenStore: tokenStore,
-		states:     newOAuthStateStore(),
+		authClient:     authClient,
+		tokenStore:     tokenStore,
+		appConfigStore: appConfigStore,
+		states:         newOAuthStateStore(),
 	}
 }
 
@@ -110,11 +112,17 @@ func (h *FeishuAuthHandler) StartAuth(c *gin.Context) {
 		return
 	}
 
+	appCfg, err := h.appConfigStore.Get(c.Request.Context(), userID)
+	if err != nil {
+		httpx.Fail(c, http.StatusBadRequest, 4001, "请先在设置中配置飞书应用凭证")
+		return
+	}
+
 	csrf := uuid.New().String()
 	state := buildOAuthState(csrf, userID)
 	h.states.Set(state, userID, 10*time.Minute) // 服务端存储，不依赖 cookie
 
-	url := h.authClient.AuthorizeURL(state)
+	url := h.authClient.AuthorizeURL(appCfg.AppID, state)
 	httpx.OK(c, gin.H{"authorize_url": url})
 }
 
@@ -143,14 +151,21 @@ func (h *FeishuAuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	tr, err := h.authClient.ExchangeCode(c.Request.Context(), code)
+	appCfg, err := h.appConfigStore.Get(c.Request.Context(), userID)
+	if err != nil {
+		log.Printf("[feishu-auth] app config missing for user %s: %v", userID, err)
+		h.renderCallbackError(c, http.StatusBadRequest, "飞书应用凭证未配置，请先在设置中保存后重新授权")
+		return
+	}
+
+	tr, err := h.authClient.ExchangeCode(c.Request.Context(), appCfg.AppID, appCfg.AppSecret, code)
 	if err != nil {
 		log.Printf("[feishu-auth] exchange code failed for user %s: %v", userID, err)
 		h.renderCallbackError(c, http.StatusBadGateway, "飞书授权码交换失败，请重试")
 		return
 	}
 
-	rec := tr.ToTokenRecord(userID)
+	rec := tr.ToTokenRecord(userID, appCfg.AppID)
 	if err := h.tokenStore.Save(c.Request.Context(), rec); err != nil {
 		log.Printf("[feishu-auth] save token failed for user %s: %v", userID, err)
 		h.renderCallbackError(c, http.StatusInternalServerError, "保存授权信息失败，请重试")
