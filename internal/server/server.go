@@ -51,6 +51,7 @@ func New(
 	settingsRepo *settings.Repo,
 	settingsFactory *settings.Factory,
 	feishuAuthHandler *handler.FeishuAuthHandler,
+	feishuAppConfigHandler *handler.FeishuAppConfigHandler,
 	loginLimiter *ratelimit.Limiter,
 	queueClient *queue.Client,
 ) *gin.Engine {
@@ -138,15 +139,16 @@ func New(
 	r.PUT("/api/v1/settings", authMW, sh.Update)
 	r.POST("/api/v1/settings/test-llm", authMW, sh.TestLLM)
 
-	// 决策 #7: 飞书 OAuth 授权流程（F012）
-	// feishuAuthHandler 为 nil 时（FEISHU_APP_ID 未配置）跳过路由注册。
+	// 决策 #7 + 用户自建应用凭证: 飞书 OAuth 授权流程 + 应用凭证管理
 	// Callback 无 authMW：飞书回跳时浏览器无 JWT，靠 state 中的 user_id 恢复身份。
-	if feishuAuthHandler != nil {
-		r.GET("/api/v1/auth/feishu/start", authMW, feishuAuthHandler.StartAuth)
-		r.GET("/api/v1/auth/feishu/status", authMW, feishuAuthHandler.Status)
-		r.POST("/api/v1/auth/feishu/revoke", authMW, feishuAuthHandler.Revoke)
-		r.GET("/api/v1/auth/feishu/callback", feishuAuthHandler.Callback)
-	}
+	r.GET("/api/v1/auth/feishu/start", authMW, feishuAuthHandler.StartAuth)
+	r.GET("/api/v1/auth/feishu/status", authMW, feishuAuthHandler.Status)
+	r.POST("/api/v1/auth/feishu/revoke", authMW, feishuAuthHandler.Revoke)
+	r.GET("/api/v1/auth/feishu/callback", feishuAuthHandler.Callback)
+
+	r.GET("/api/v1/feishu/app-config", authMW, feishuAppConfigHandler.Get)
+	r.PUT("/api/v1/feishu/app-config", authMW, feishuAppConfigHandler.Put)
+	r.DELETE("/api/v1/feishu/app-config", authMW, feishuAppConfigHandler.Delete)
 
 	return r
 }
