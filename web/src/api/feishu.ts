@@ -28,3 +28,27 @@ export async function revokeFeishuAuth(): Promise<{ status: string }> {
     method: "POST",
   });
 }
+
+export interface FeishuAppConfig {
+  app_id: string;
+  app_secret_masked: string;
+  configured: boolean;
+}
+
+/** GET /api/v1/feishu/app-config - 查询当前用户飞书应用凭证配置状态 */
+export async function getFeishuAppConfig(): Promise<FeishuAppConfig> {
+  return apiFetch<FeishuAppConfig>("/api/v1/feishu/app-config");
+}
+
+/** PUT /api/v1/feishu/app-config - 保存/更新飞书应用凭证。app_secret 留空或传掩码值保持原值不变 */
+export async function updateFeishuAppConfig(appId: string, appSecret: string): Promise<FeishuAppConfig> {
+  return apiFetch<FeishuAppConfig>("/api/v1/feishu/app-config", {
+    method: "PUT",
+    body: { app_id: appId, app_secret: appSecret },
+  });
+}
+
+/** DELETE /api/v1/feishu/app-config - 删除飞书应用凭证（级联清除已有 OAuth 授权） */
+export async function deleteFeishuAppConfig(): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>("/api/v1/feishu/app-config", { method: "DELETE" });
+}
