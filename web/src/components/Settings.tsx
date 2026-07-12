@@ -11,7 +11,10 @@ import {
   getFeishuStatus,
   startFeishuAuth,
   revokeFeishuAuth,
+  getFeishuAppConfig,
+  updateFeishuAppConfig,
   type FeishuAuthStatus,
+  type FeishuAppConfig,
 } from "../api/feishu";
 import { showToast } from "./Layout";
 import { useRipple } from "../hooks/useRipple";
@@ -86,6 +89,10 @@ export function Settings() {
   const [preset, setPreset] = useState<string>("custom");
   const [feishuStatus, setFeishuStatus] = useState<FeishuAuthStatus | null>(null);
   const [feishuLoading, setFeishuLoading] = useState(false);
+  const [feishuAppConfig, setFeishuAppConfig] = useState<FeishuAppConfig>({ app_id: "", app_secret_masked: "", configured: false });
+  const [feishuAppIdInput, setFeishuAppIdInput] = useState("");
+  const [feishuAppSecretInput, setFeishuAppSecretInput] = useState("");
+  const [savingFeishuConfig, setSavingFeishuConfig] = useState(false);
   const ripple = useRipple();
 
   const load = useCallback(async () => {
@@ -119,6 +126,13 @@ export function Settings() {
       .catch(() => {
         // 静默：未授权或接口不可用时 status 保持 null，UI 显示"未授权"
       });
+    getFeishuAppConfig()
+      .then((cfg) => {
+        setFeishuAppConfig(cfg);
+        setFeishuAppIdInput(cfg.app_id);
+        setFeishuAppSecretInput(cfg.app_secret_masked);
+      })
+      .catch(() => {});
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         getFeishuStatus()
@@ -217,6 +231,28 @@ export function Settings() {
       showToast("解除失败", err instanceof Error ? err.message : String(err), "error");
     } finally {
       setFeishuLoading(false);
+    }
+  };
+
+  const handleSaveFeishuAppConfig = async (e: React.MouseEvent<HTMLElement>) => {
+    ripple(e);
+    if (savingFeishuConfig) return;
+    if (!feishuAppIdInput) {
+      showToast("保存失败", "App ID 不能为空", "error");
+      return;
+    }
+    setSavingFeishuConfig(true);
+    try {
+      const updated = await updateFeishuAppConfig(feishuAppIdInput, feishuAppSecretInput);
+      setFeishuAppConfig(updated);
+      setFeishuAppSecretInput(updated.app_secret_masked);
+      // 后端保存新凭证时会级联清除旧 OAuth token，前端同步刷新授权状态
+      setFeishuStatus({ status: "not_authorized", name: "" });
+      showToast("保存成功", "飞书应用凭证已更新，请重新授权", "success");
+    } catch (err) {
+      showToast("保存失败", err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setSavingFeishuConfig(false);
     }
   };
 
@@ -407,6 +443,37 @@ export function Settings() {
       </SectionCard>
 
       <SectionCard title="飞书集成" desc="授权后可拉取飞书任务、接收任务事件、交付到飞书文档">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <Field label="App ID">
+            <TextInput
+              type="text"
+              value={feishuAppIdInput}
+              onChange={(e) => setFeishuAppIdInput(e.target.value)}
+              placeholder="cli_xxxxxxxxxxxx"
+            />
+          </Field>
+          <Field label="App Secret" hint={isMaskedKey(feishuAppSecretInput) ? "已掩码，留空或不改保持原值" : undefined}>
+            <TextInput
+              type="password"
+              value={feishuAppSecretInput}
+              onChange={(e) => setFeishuAppSecretInput(e.target.value)}
+              placeholder="飞书开放平台 → 凭证与基础信息"
+              autoComplete="off"
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end mb-5">
+          <button
+            onClick={handleSaveFeishuAppConfig}
+            disabled={savingFeishuConfig}
+            className="px-4 py-2.5 rounded-xl border border-[var(--border-default)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] btn-press ripple-container disabled:opacity-50 flex items-center gap-2"
+          >
+            {savingFeishuConfig ? (
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            ) : null}
+            保存凭证
+          </button>
+        </div>
         {feishuStatus?.status === "authorized" ? (
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
@@ -450,7 +517,8 @@ export function Settings() {
             </div>
             <button
               onClick={handleStartFeishuAuth}
-              disabled={feishuLoading}
+              disabled={feishuLoading || !feishuAppConfig.configured}
+              title={!feishuAppConfig.configured ? "请先保存飞书应用凭证" : undefined}
               className="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-medium btn-press ripple-container disabled:opacity-50 flex items-center gap-2 hover:bg-emerald-400 transition-colors"
             >
               {feishuLoading ? (
