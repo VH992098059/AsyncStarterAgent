@@ -451,7 +451,8 @@ func (s *Service) ChatWithRun(ctx context.Context, runID, userID, userMessage st
 	maxTokens := r6.maxTokens
 
 	// 7. 构造 LLM messages：system（含 task_type + 草稿）+ 历史
-	// 历史只取 user(sent) + assistant(done)，跳过 error/streaming 避免干扰上下文
+	// 历史按 token 预算裁剪：user 全部纳入、assistant 只取 status=done（跳过 error/streaming
+	// 避免干扰上下文），超预算时从最旧消息开始裁，但强制保留本轮刚发的最后一条 user 消息。
 	systemContent := fmt.Sprintf(
 		"你是一个专业的文档助手。当前任务类型：%s。你可以基于已生成的草稿回答用户问题或修改草稿内容。",
 		run.TaskType,
@@ -463,14 +464,7 @@ func (s *Service) ChatWithRun(ctx context.Context, runID, userID, userMessage st
 	}
 
 	msgs := []Message{{Role: "system", Content: systemContent}}
-	for _, m := range history {
-		switch {
-		case m.Role == "user":
-			msgs = append(msgs, Message{Role: "user", Content: m.Content})
-		case m.Role == "assistant" && m.Status == "done":
-			msgs = append(msgs, Message{Role: "assistant", Content: m.Content})
-		}
-	}
+	msgs = append(msgs, buildChatHistory(history, defaultHistoryTokenBudget)...)
 
 	// 8. LLM 流式调用
 	ch, err := llm.Chat(ctx, ChatRequest{
